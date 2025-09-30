@@ -10,7 +10,19 @@ namespace Celeste.Mod.PPOCeleste
 {
     public class PPOTorch
     {
-        
 
+
+
+        public class ActionReceiver
+        {
+
+
+
+            public static bool GetKey(string key)
+            {
+                return latestActions.ContainsKey(key) && latestActions[key];
+            } 
+        } 
     }
 }
+

@@ -32,46 +32,17 @@ namespace Celeste.Mod.PPOCeleste
                     clock = 0f;
                     var level = self.Scene as Level;
                     var obs = GetObservation(level);
+                    PPOCelesteModule.Instance.SendObsToPPO(obs);
 
+                    PPOCelesteModule.Instance.GetActionFromPPO();
                     ApplyActions(self);           // important
 
                     // On push dans la queue (non bloquant)
-                    lock (lockObs)
-                    {
-                        latestObs = obs;
-                    }
+                    
                 }
             };
             On.Celeste.Player.Update += updateHook;
-
-            // Lancer un thread qui lit la queue et envoie au pipe
-            new Thread(SendLoop) { IsBackground = true }.Start();
         }
-
-        private static void SendLoop()
-        {
-            while (true)
-            {
-                Thread.Sleep(1);
-                Dictionary<string, object> obsToSend = null;
-
-                lock (lockObs)
-                {
-                    if (latestObs != null)
-                    {
-                        obsToSend = latestObs;
-                        latestObs = null;
-                    }
-                }
-                
-                if (obsToSend != null)
-                {
-                    PPOCelesteModule.Instance.SendObservationToPipe(obsToSend);
-                }
-            }
-        }
-
-
 
 
         public static void Unload()
@@ -119,7 +90,6 @@ namespace Celeste.Mod.PPOCeleste
                 // Matrice 15*15 centrée sur le joueur (0: vide, 1: solide, 2-3-4-5: spikes)
                 obs["grid"] = GetGrid(level, lastPlayer, 15);
             }
-            PPOCelesteModule.Instance.Send_errors("obs generated");
             return obs;
 
         }
@@ -207,32 +177,32 @@ namespace Celeste.Mod.PPOCeleste
 
         public static void ApplyActions(Player player)
         {
-            if (PipeClient.ActionReceiver.GetKey("left"))
+            if (PPOTorch.ActionReceiver.GetKey("left"))
             {
                 player.Speed.X -= 1; // ou ajuster player.Speed.X
             }
-            if (PipeClient.ActionReceiver.GetKey("right"))
+            if (PPOTorch.ActionReceiver.GetKey("right"))
             {
                 player.Speed.X += 1;
             }
-            if (PipeClient.ActionReceiver.GetKey("up"))
+            if (PPOTorch.ActionReceiver.GetKey("up"))
             {
                 player.Speed.Y -= 1; // ou ajuster player.Speed.X
             }
-            if (PipeClient.ActionReceiver.GetKey("down"))
+            if (PPOTorch.ActionReceiver.GetKey("down"))
             {
                 player.Speed.Y += 1;
             }
 
-            if (PipeClient.ActionReceiver.GetKey("jump"))
+            if (PPOTorch.ActionReceiver.GetKey("jump"))
             {
                 player.Jump();
             }
-            if (PipeClient.ActionReceiver.GetKey("dash") && player.Dashes > 0)
+            if (PPOTorch.ActionReceiver.GetKey("dash") && player.Dashes > 0)
             {
                 player.DashBegin();
             }
-            if (PipeClient.ActionReceiver.GetKey("grab"))
+            if (PPOTorch.ActionReceiver.GetKey("grab"))
             {
                 if (player.CollideCheck<Solid>(player.Position + Vector2.UnitX) || // right
                     player.CollideCheck<Solid>(player.Position - Vector2.UnitX))   // left
