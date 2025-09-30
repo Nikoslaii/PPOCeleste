@@ -1,0 +1,6 @@
+- Name: PPOCeleste
+  Version: 0.1.0
+  DLL: bin/PPOCeleste.dll
+  Dependencies:
+    - Name: EverestCore
+      Version: 1.5577.0
