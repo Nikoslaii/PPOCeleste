@@ -1,3 +1,10 @@
+/*
+ce fichier est destiner à cotenir les modification sur le personnage est tout interaction avec celeste
+comme les input et observations
+
+*/
+
+
 using Monocle;
 using Celeste;
 using System.Collections.Generic;
@@ -9,74 +16,75 @@ namespace Celeste.Mod.PPOCeleste
 {
     public static class Hooks
     {
-        private static On.Celeste.Player.hook_Update updateHook;
-        private static Player lastPlayer;
-        private static Dictionary<string, object> latestObs = null;
-        private static object lockObs = new object();
-        private static float clock = 0f;
+        private static On.Celeste.Player.hook_Update updateHook;//permet plus facilement la l'ajout à la fonction #risque de changer
+        private static Player lastPlayer;//pour garder en mémoire l'état du joueur à l'instant de l'observation
+        private static Dictionary<string, object> latestObs = null;// ancier objet pour l'envoi à pipe bon pour la poubelle
+        private static object lockObs = new object();//ancier thread bon pour la poubelle
+        private static float clock = 0f;// compteur pour connaitre le temps passer
         private const float SendInterval = 1f / 20f; // 20 Hz
 
 
 
-        public static void Load()
+        public static void Load()//au lancement du mod
         {
+            // ajoute à la fonction de mise a jour du personage effectuer a chaque frame(60 par seconde)différente fonctionalité
             updateHook = (orig, self) =>
             {
-                lastPlayer = self;
-                orig(self);
+                
+                orig(self);//fonction originel de On.Celeste.Player.hook_Update soit player.update()
 
                 // Timer pour 20Hz
-                clock += Engine.RawDeltaTime;
-                if (clock >= SendInterval)
+                clock += Engine.RawDeltaTime;// mets à jour le temps passer
+                if (clock >= SendInterval)//compare pour vérifier que ça fait 1/20 seconde
                 {
-                    clock = 0f;
-                    var level = self.Scene as Level;
-                    var obs = GetObservation(level);
-                    PPOCelesteModule.Instance.SendObsToPPO(obs);
+                    lastPlayer = self;//stoque l'état du joueur a cette frame 
+                    clock = 0f;//réinitialise la clock  
+                    var level = self.Scene as Level;// stoque le niveau actuel pour une utilisation claire
+                    var obs = GetObservation(level);//récupère les variable/input pour l'entrainement
+                    PPOCelesteModule.Instance.SendObsToPPO(obs);//envois les input a PPOTorsh
 
-                    PPOCelesteModule.Instance.GetActionFromPPO();
+                    PPOCelesteModule.Instance.GetActionFromPPO(); // peut être 
                     ApplyActions(self);           // important
 
                     // On push dans la queue (non bloquant)
-                    
+
                 }
             };
-            On.Celeste.Player.Update += updateHook;
+            On.Celeste.Player.Update += updateHook;// change la fonction du player par notre nouvelle fonction 
         }
 
 
-        public static void Unload()
+        public static void Unload()//pour la desactivation du mod
         {
             if (updateHook != null)
             {
-                On.Celeste.Player.Update -= updateHook;
-            }    
-            
+                On.Celeste.Player.Update -= updateHook;//retire notre fonction du jeu
+            }
+
         }
 
         // Fonction pour récupérer les données utiles pour PPO
         public static Dictionary<string, object> GetObservation(Level level = null)
         {
-            var obs = new Dictionary<string, object>();
-            if (lastPlayer != null)
+            var obs = new Dictionary<string, object>();//creation de notre 
+            if (lastPlayer != null && level != null)//répétitif avec la logique de update mais au cas ou
             {
 
-                // Ennemis proches (limité à 10 pour éviter surcharge)
+                // Ennemis proches (limité à 10 pour éviter surcharge) #TODO mettre la limite sur Torch
                 var enemies = new List<float>();
-                if (level != null)
-                {
-                    int count = 0;
-                    foreach (var entity in level.Tracker.GetEntities<Seeker>())
-                    {
-                        if (count >= 10) break;
-                        enemies.Add(entity.Position.X);
-                        enemies.Add(entity.Position.Y);
-                        enemies.Add(entity.Width);
-                        enemies.Add(entity.Height);
-                        count++;
-                    }
-                }
 
+                int count = 0;//compte le nombre d'ennemie
+                foreach (var entity in level.Tracker.GetEntities<Seeker>())
+                {
+                    if (count >= 10) break;//limite à 10 ennemie en coupant la boucle
+                    enemies.Add(entity.Position.X);
+                    enemies.Add(entity.Position.Y);
+                    enemies.Add(entity.Width);
+                    enemies.Add(entity.Height);
+                    count++;
+                }
+                
+                //construction des 
                 obs["x"] = lastPlayer.Position.X;
                 obs["y"] = lastPlayer.Position.Y;
                 obs["vx"] = lastPlayer.Speed.X;
@@ -85,9 +93,9 @@ namespace Celeste.Mod.PPOCeleste
                 obs["dashes_left"] = lastPlayer.Dashes;
                 obs["wallcheck"] = GetWallCheck(lastPlayer);
                 obs["grab"] = lastPlayer.StateMachine.State == Player.StClimb;
-                obs["progress"] = GetProgress(level, lastPlayer);
+                obs["progress"] = GetProgress(level, lastPlayer);//variable d'avancement à optimiser #va impérativement changer avec Loën
                 obs["enemies"] = enemies;
-                // Matrice 15*15 centrée sur le joueur (0: vide, 1: solide, 2-3-4-5: spikes)
+                // Matrice 15*15 centrée sur le joueur (0: vide, 1: solide, 2(^)-3(>)-4(v)-5(<): spikes)
                 obs["grid"] = GetGrid(level, lastPlayer, 15);
             }
             return obs;
@@ -96,40 +104,39 @@ namespace Celeste.Mod.PPOCeleste
 
         private static bool GetWallCheck(Player player)
         {
-            // True si Madeline touche un mur à gauche OU à droite
+            // True si Madeline touche un mur à gauche ou à droite
             return player.CollideCheck<Solid>(player.Position + new Vector2(-1, 0))
                 || player.CollideCheck<Solid>(player.Position + new Vector2(1, 0));
         }
 
         private static float GetProgress(Level level, Player player)
         {
-            // Exemple simple : progression horizontale dans la room DOIT CHANGER
-            if (level == null) return 0f;
+            // Exemple simple : progression horizontale dans la room #DOIT CHANGER
             float minX = level.Bounds.Left;
             float maxX = level.Bounds.Right;
             float px = Calc.Clamp(player.Position.X, minX, maxX);
             return (px - minX) / (maxX - minX);
         }
 
+        //fonction pour optenir une grille de "la vision" de l'agent# à optimiser
         private static List<int> GetGrid(Level level, Player player, int gridSize = 15)
         {
             var grid = new List<int>();
-            if (level == null) return grid;
 
             int tileSize = 8; // taille d'une tuile en pixels
-            int half = gridSize / 2; // half for centering
+            int half = gridSize / 2; // half pour centrer
 
             // Position du joueur en coordonnées de tile
             int playerTileX = (int)(player.Position.X / tileSize);
             int playerTileY = (int)(player.Position.Y / tileSize);
 
-            for (int dy = -half; dy <= half; dy++) // from -half to half inclusive for gridSize cells
+            for (int dy = -half; dy <= half; dy++) // de moins a plus pour permetre d'avoir les casse autour de l'agent
             {
-                for (int dx = -half; dx <= half; dx++)
+                for (int dx = -half; dx <= half; dx++) // de même
                 {
-                    int tileX = playerTileX + dx;
+                    int tileX = playerTileX + dx;// avoir la possition de la tile
                     int tileY = playerTileY + dy;
-                    Vector2 tilePos = new(tileX * tileSize, tileY * tileSize);
+                    Vector2 tilePos = new(tileX * tileSize, tileY * tileSize);//vecteur de la localisation de la case
 
                     // Échantillonnage : coins + centre
                     Vector2[] samplePoints =
@@ -143,10 +150,10 @@ namespace Celeste.Mod.PPOCeleste
 
                     int val = 0;
 
-                    // Vérifier les spikes
+                    // Vérifier les spikes (il font moins que une demis case alors il falait chercher autour pour voir le spike)
                     foreach (var p in samplePoints)
                     {
-                        foreach (Spikes spike in level.Tracker.GetEntities<Spikes>())
+                        foreach (Spikes spike in level.Tracker.GetEntities<Spikes>())//vérifie pour chaque spike si il est sur cette case j'ai pas encore plus simple #trouver plus simple
                         {
                             if (spike.CollidePoint(p))
                             {
@@ -163,7 +170,7 @@ namespace Celeste.Mod.PPOCeleste
                         if (val != 0) break; // stop si spike détecté
                     }
 
-                    // Vérifier solid uniquement si pas de spike
+                    // Vérifier solide uniquement si pas de spike
                     if (val == 0 && level.CollideCheck<Solid>(tilePos))
                     {
                         val = 1;
@@ -175,6 +182,7 @@ namespace Celeste.Mod.PPOCeleste
             return grid;
         }
 
+        //actione en fonction des output du PPO
         public static void ApplyActions(Player player)
         {
             if (PPOTorch.ActionReceiver.GetKey("left"))

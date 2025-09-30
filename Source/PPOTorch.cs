@@ -18,6 +18,7 @@ namespace Celeste.Mod.PPOCeleste
 
 
 
+
             public static bool GetKey(string key)
             {
                 return latestActions.ContainsKey(key) && latestActions[key];
