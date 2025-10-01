@@ -92,7 +92,7 @@ namespace Celeste.Mod.PPOCeleste
                 obs["grounded"] = lastPlayer.OnGround();
                 obs["dashes_left"] = lastPlayer.Dashes;
                 obs["wallcheck"] = GetWallCheck(lastPlayer);
-                obs["grab"] = lastPlayer.StateMachine.State == Player.StClimb;
+                obs["grab"] = lastPlayer.StateMachine.State == Player.StClimb; 
                 obs["progress"] = GetProgress(level, lastPlayer);//variable d'avancement à optimiser #va impérativement changer avec Loën
                 obs["enemies"] = enemies;
                 // Matrice 15*15 centrée sur le joueur (0: vide, 1: solide, 2(^)-3(>)-4(v)-5(<): spikes)

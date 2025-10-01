@@ -2,6 +2,7 @@
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
 
 
 namespace Celeste.Mod.PPOCeleste;
@@ -19,7 +20,6 @@ public class PPOCelesteModule : EverestModule
     public override Type SaveDataType => typeof(PPOCelesteModuleSaveData);
     public static PPOCelesteModuleSaveData SaveData => (PPOCelesteModuleSaveData)Instance._SaveData;
 
-
     public PPOCelesteModule()
     {
         Instance = this;
@@ -30,26 +30,34 @@ public class PPOCelesteModule : EverestModule
 #endif
     }
 
-    public override void Load()
+    private PPOTorch ppo;
+
+    public override void Load()//lancé au chargement du mod 
     {
+        ppo = new PPOTorch();
         Hooks.Load();
+        ppo.start();
     }
 
-    public override void Initialize()
+    public override void Initialize()//lancé après le chargement 
     {
 
     }
 
-    public override void Unload()
+    public override void Unload()//lancé au déchargement du mod
     {
         Hooks.Unload();
+        ppo?.stop();
     }
 
-    public void SendObsToPPO(Dictionary<string, object> obs)
+    public void SendObsToPPO(Dictionary<string, object> obs)//liens entre hooks et ppo
     {
-
+        ppo.ReceiveObs(obs);
     }
 
-    
+    public Dictionary<string, bool> GetActionFromPPO()
+    {
+        return ppo.GetActionFromPPO();
+    }
 }
 
