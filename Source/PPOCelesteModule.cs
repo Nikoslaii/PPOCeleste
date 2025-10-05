@@ -36,7 +36,7 @@ public class PPOCelesteModule : EverestModule
     {
         ppo = new PPOTorch();
         Hooks.Load();
-        ppo.start();
+        ppo.Start();
     }
 
     public override void Initialize()//lancé après le chargement 
@@ -47,7 +47,7 @@ public class PPOCelesteModule : EverestModule
     public override void Unload()//lancé au déchargement du mod
     {
         Hooks.Unload();
-        ppo?.stop();
+        ppo?.Stop();
     }
 
     public void SendObsToPPO(Dictionary<string, object> obs)//liens entre hooks et ppo

@@ -18,8 +18,6 @@ namespace Celeste.Mod.PPOCeleste
     {
         private static On.Celeste.Player.hook_Update updateHook;//permet plus facilement la l'ajout à la fonction #risque de changer
         private static Player lastPlayer;//pour garder en mémoire l'état du joueur à l'instant de l'observation
-        private static Dictionary<string, object> latestObs = null;// ancier objet pour l'envoi à pipe bon pour la poubelle
-        private static object lockObs = new object();//ancier thread bon pour la poubelle
         private static float clock = 0f;// compteur pour connaitre le temps passer
         private const float SendInterval = 1f / 20f; // 20 Hz
 
@@ -185,32 +183,34 @@ namespace Celeste.Mod.PPOCeleste
         //actione en fonction des output du PPO
         public static void ApplyActions(Player player)
         {
-            if (PPOTorch.ActionReceiver.GetKey("left"))
+            var actions = PPOCelesteModule.Instance.GetActionFromPPO();
+
+            if (actions.TryGetValue("left", out bool left) && left)
             {
                 player.Speed.X -= 1; // ou ajuster player.Speed.X
             }
-            if (PPOTorch.ActionReceiver.GetKey("right"))
+            if (actions.TryGetValue("right", out bool right) && right)
             {
                 player.Speed.X += 1;
             }
-            if (PPOTorch.ActionReceiver.GetKey("up"))
+            if (actions.TryGetValue("up", out bool up) && up)
             {
                 player.Speed.Y -= 1; // ou ajuster player.Speed.X
             }
-            if (PPOTorch.ActionReceiver.GetKey("down"))
+            if (actions.TryGetValue("down", out bool down) && down)
             {
                 player.Speed.Y += 1;
             }
 
-            if (PPOTorch.ActionReceiver.GetKey("jump"))
+            if (actions.TryGetValue("jump", out bool jump) && jump)
             {
                 player.Jump();
             }
-            if (PPOTorch.ActionReceiver.GetKey("dash") && player.Dashes > 0)
+            if (actions.TryGetValue("dash", out bool dash) && dash && player.Dashes > 0)
             {
                 player.DashBegin();
             }
-            if (PPOTorch.ActionReceiver.GetKey("grab"))
+            if (actions.TryGetValue("grab", out bool grab) && grab)
             {
                 if (player.CollideCheck<Solid>(player.Position + Vector2.UnitX) || // right
                     player.CollideCheck<Solid>(player.Position - Vector2.UnitX))   // left

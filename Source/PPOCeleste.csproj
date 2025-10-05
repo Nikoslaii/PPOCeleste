@@ -21,7 +21,8 @@
         <PackageReference Include="MonoMod.Patcher" Version="25.0.0-prerelease.2" />
         <PackageReference Include="CelesteAnalyzer" Version="*" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-        <PackageReference Include="TorchSharp-cuda-windows" Version="0.105.1" />
+        <PackageReference Include="TorchSharp" Version="0.105.1" PrivateAssets="all" ExcludeAssets="runtime"/>
+        <PackageReference Include="TorchSharp-cuda-windows" Version="0.105.1" PrivateAssets="all" ExcludeAssets="runtime"/>
     </ItemGroup>
 
     <ItemGroup>
