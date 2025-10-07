@@ -18,6 +18,7 @@
     </ItemDefinitionGroup>
 
     <ItemGroup>
+        <PackageReference Include="libtorch-cuda-12.1-win-x64" Version="2.5.1" />
         <PackageReference Include="MonoMod.RuntimeDetour" Version="25.2.3" PrivateAssets="all" ExcludeAssets="runtime" />
         <PackageReference Include="MonoMod.Patcher" Version="25.0.0-prerelease.2" />
         <PackageReference Include="CelesteAnalyzer" Version="*" />

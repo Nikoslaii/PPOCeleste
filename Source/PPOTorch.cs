@@ -4,8 +4,8 @@ Fichier contenant la logique PPO réécrite de zéro pour la gestion de l'agent 
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.IO;
+using System.Linq;
 using TorchSharp;
 using TorchSharp.Modules;
 using static TorchSharp.torch;

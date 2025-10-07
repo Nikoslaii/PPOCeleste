@@ -5,11 +5,9 @@ comme les input et observations
 */
 
 
-using Monocle;
-using Celeste;
-using System.Collections.Generic;
 using Microsoft.Xna.Framework;
-using System.Threading;
+using Monocle;
+using System.Collections.Generic;
 
 
 namespace Celeste.Mod.PPOCeleste
@@ -28,7 +26,7 @@ namespace Celeste.Mod.PPOCeleste
             // ajoute à la fonction de mise a jour du personage effectuer a chaque frame(60 par seconde)différente fonctionalité
             updateHook = (orig, self) =>
             {
-                
+
                 orig(self);//fonction originel de On.Celeste.Player.hook_Update soit player.update()
 
                 // Timer pour 20Hz
@@ -81,7 +79,7 @@ namespace Celeste.Mod.PPOCeleste
                     enemies.Add(entity.Height);
                     count++;
                 }
-                
+
                 //construction des 
                 obs["x"] = lastPlayer.Position.X;
                 obs["y"] = lastPlayer.Position.Y;
@@ -90,7 +88,7 @@ namespace Celeste.Mod.PPOCeleste
                 obs["grounded"] = lastPlayer.OnGround();
                 obs["dashes_left"] = lastPlayer.Dashes;
                 obs["wallcheck"] = GetWallCheck(lastPlayer);
-                obs["grab"] = lastPlayer.StateMachine.State == Player.StClimb; 
+                obs["grab"] = lastPlayer.StateMachine.State == Player.StClimb;
                 obs["progress"] = GetProgress(level, lastPlayer);//variable d'avancement à optimiser #va impérativement changer avec Loën
                 obs["enemies"] = enemies;
                 // Matrice 15*15 centrée sur le joueur (0: vide, 1: solide, 2(^)-3(>)-4(v)-5(<): spikes)

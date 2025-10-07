@@ -1,5 +1,6 @@
 namespace Celeste.Mod.PPOCeleste;
 
-public class PPOCelesteModuleSaveData : EverestModuleSaveData {
+public class PPOCelesteModuleSaveData : EverestModuleSaveData
+{
 
 }

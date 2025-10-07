@@ -1,5 +1,6 @@
 namespace Celeste.Mod.PPOCeleste;
 
-public class PPOCelesteModuleSettings : EverestModuleSettings {
+public class PPOCelesteModuleSettings : EverestModuleSettings
+{
 
 }

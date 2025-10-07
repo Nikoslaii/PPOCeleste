@@ -1,8 +1,5 @@
-﻿using AsmResolver.DotNet.Builder;
-using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Security.Cryptography.X509Certificates;
 
 
 namespace Celeste.Mod.PPOCeleste;
