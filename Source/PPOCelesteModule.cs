@@ -31,14 +31,16 @@ public class PPOCelesteModule : EverestModule
 
     public override void Load()//lancé au chargement du mod 
     {
-        ppo = new PPOTorch();
+        
         Hooks.Load();
-        ppo.Start();
+
     }
 
     public override void Initialize()//lancé après le chargement 
     {
+        ppo = new PPOTorch();
 
+        ppo.Start();
     }
 
     public override void Unload()//lancé au déchargement du mod

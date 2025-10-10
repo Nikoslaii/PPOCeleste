@@ -19,15 +19,24 @@
 
     <ItemGroup>
         <PackageReference Include="libtorch-cuda-12.1-win-x64" Version="2.5.1" />
-        <PackageReference Include="MonoMod.RuntimeDetour" Version="25.2.3" PrivateAssets="all" ExcludeAssets="runtime" />
+        <PackageReference Include="Microsoft.ML" Version="4.0.2" />
+        <PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.1">
+          <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
         <PackageReference Include="MonoMod.Patcher" Version="25.0.0-prerelease.2" />
-        <PackageReference Include="CelesteAnalyzer" Version="*" />
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-        <PackageReference Include="TorchSharp" Version="0.105.1" PrivateAssets="all" ExcludeAssets="runtime" />
+        <PackageReference Include="CelesteAnalyzer" Version="*" />  
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />  
+        <PackageReference Include="TorchAudio" Version="0.105.1" />
+        <PackageReference Include="TorchSharp" Version="0.105.1" PrivateAssets="none">
+          <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="TorchSharp-cuda-12.1" Version="0.105.0.1" />
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="CelesteMod.Publicizer" Version="*" CelesteAssembly="$(CelestePrefix)\Celeste.dll" />
+        <PackageReference Include="TorchSharp-cuda-windows" Version="0.105.1" />
+        <PackageReference Include="TorchVision" Version="0.105.1" />
         <Reference Include="$(CelestePrefix)\MMHOOK_Celeste.dll" Private="false" />
         <Reference Include="$(CelestePrefix)\FNA.dll" Private="false" />
     </ItemGroup>
