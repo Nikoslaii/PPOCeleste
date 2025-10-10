@@ -1,113 +1,121 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
-        <AssemblyName>PPOCeleste</AssemblyName>
-        <RootNamespace>Celeste.Mod.PPOCeleste</RootNamespace>
-        <LangVersion>latest</LangVersion>
-        <CelestePrefix Condition="'$(CelestePrefix)' == '' And Exists('..\..\..\Celeste.dll')">..\..\..</CelestePrefix>
-        <CelestePrefix Condition="'$(CelestePrefix)' == ''">lib-stripped</CelestePrefix>
-        <ZippedFiles>..\everest.yaml;..\bin\**\*.*;..\Audio\**\*.*;..\Dialog\**\*.*;..\Graphics\**\*.*;..\Ahorn\**\*.*;..\Loenn\**\*.*</ZippedFiles>
-        <Platforms>x64</Platforms>
-    </PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>PPOCeleste</AssemblyName>
+    <RootNamespace>Celeste.Mod.PPOCeleste</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <CelestePrefix Condition="'$(CelestePrefix)' == '' And Exists('..\..\..\Celeste.dll')">..\..\..</CelestePrefix>
+    <CelestePrefix Condition="'$(CelestePrefix)' == ''">lib-stripped</CelestePrefix>
+    <ZippedFiles>..\everest.yaml;..\bin\**\*.*;..\Audio\**\*.*;..\Dialog\**\*.*;..\Graphics\**\*.*;..\Ahorn\**\*.*;..\Loenn\**\*.*</ZippedFiles>
+    <Platforms>x64</Platforms>
+  </PropertyGroup>
 
-    <!--Disable "Copy Local" for all references-->
-    <ItemDefinitionGroup>
-        <PackageReference PrivateAssets="all" ExcludeAssets="runtime" />
-        <Reference Private="false" />
-    </ItemDefinitionGroup>
+  <ItemDefinitionGroup>
+    <PackageReference PrivateAssets="all" ExcludeAssets="runtime" />
+    <Reference Private="false" />
+  </ItemDefinitionGroup>
 
+  <ItemGroup>
+    <!-- ✅ TorchSharp stack (CUDA 12.1, PyTorch 2.5.1) -->
+    <PackageReference Include="TorchSharp" Version="0.105.1" />
+    <PackageReference Include="TorchSharp-cuda-12.1" Version="0.105.1" />
+    <PackageReference Include="TorchAudio" Version="0.105.1" />
+    <PackageReference Include="TorchVision" Version="0.105.1" />
+
+    <!-- 🔧 ML / Mod Tools -->
+    <PackageReference Include="Microsoft.ML" Version="4.0.2" />
+    <PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.1">
+      <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="MonoMod.Patcher" Version="25.0.0-prerelease.2" />
+    <PackageReference Include="CelesteAnalyzer" Version="*" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CelesteMod.Publicizer" Version="*" CelesteAssembly="$(CelestePrefix)\Celeste.dll" />
+    <Reference Include="$(CelestePrefix)\MMHOOK_Celeste.dll" Private="false" />
+    <Reference Include="$(CelestePrefix)\FNA.dll" Private="false" />
+  </ItemGroup>
+
+  <Target Name="CopyFiles" AfterTargets="Build"
+          Inputs="$(OutputPath)\$(AssemblyName).dll;$(OutputPath)\$(AssemblyName).pdb"
+          Outputs="..\bin\$(AssemblyName).dll;..\bin\$(AssemblyName).pdb">
+    <Copy SourceFiles="$(OutputPath)\$(AssemblyName).dll" DestinationFolder="..\bin" />
+    <Copy SourceFiles="$(OutputPath)\$(AssemblyName).pdb" DestinationFolder="..\bin" />
+  </Target>
+
+  <!-- 🧩 Copie automatique des DLL natives TorchSharp -->
+  <Target Name="CopyTorchSharpNative" AfterTargets="Build">
     <ItemGroup>
-        <PackageReference Include="libtorch-cuda-12.1-win-x64" Version="2.5.1" />
-        <PackageReference Include="Microsoft.ML" Version="4.0.2" />
-        <PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.1">
-          <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-        </PackageReference>
-        <PackageReference Include="MonoMod.Patcher" Version="25.0.0-prerelease.2" />
-        <PackageReference Include="CelesteAnalyzer" Version="*" />  
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />  
-        <PackageReference Include="TorchAudio" Version="0.105.1" />
-        <PackageReference Include="TorchSharp" Version="0.105.1" PrivateAssets="none">
-          <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-        </PackageReference>
-        <PackageReference Include="TorchSharp-cuda-12.1" Version="0.105.0.1" />
+      <TorchNativeFiles Include="$(UserProfile)\.nuget\packages\torchsharp-cuda-12.1\0.105.1\runtimes\win-x64\native\*.*" />
     </ItemGroup>
+    <Copy SourceFiles="@(TorchNativeFiles)" DestinationFolder="..\bin" SkipUnchangedFiles="true" />
+  </Target>
 
+  <Target Name="PackageMod" AfterTargets="CopyFiles"
+          Inputs="$(ZippedFiles)" Outputs="..\PPOCeleste.zip"
+          Condition="'$(Configuration)' == 'Release'">
     <ItemGroup>
-        <PackageReference Include="CelesteMod.Publicizer" Version="*" CelesteAssembly="$(CelestePrefix)\Celeste.dll" />
-        <PackageReference Include="TorchSharp-cuda-windows" Version="0.105.1" />
-        <PackageReference Include="TorchVision" Version="0.105.1" />
-        <Reference Include="$(CelestePrefix)\MMHOOK_Celeste.dll" Private="false" />
-        <Reference Include="$(CelestePrefix)\FNA.dll" Private="false" />
+      <FilesToPackage Include="$(ZippedFiles)" />
     </ItemGroup>
+    <PackageMod Files="@(FilesToPackage)" OutputPath="..\PPOCeleste.zip" />
+  </Target>
 
-    <Target Name="CopyFiles" AfterTargets="Build" Inputs="$(OutputPath)\$(AssemblyName).dll;$(OutputPath)\$(AssemblyName).pdb" Outputs="..\bin\$(AssemblyName).dll;..\bin\$(AssemblyName).pdb">
-        <Copy SourceFiles="$(OutputPath)\$(AssemblyName).dll" DestinationFolder="..\bin" />
-        <Copy SourceFiles="$(OutputPath)\$(AssemblyName).pdb" DestinationFolder="..\bin" />
-    </Target>
+  <PropertyGroup>
+    <PathMap>$(MSBuildProjectDirectory)=PPOCeleste/</PathMap>
+  </PropertyGroup>
 
-    <Target Name="PackageMod" AfterTargets="CopyFiles" Inputs="$(ZippedFiles)" Outputs="..\PPOCeleste.zip" Condition="'$(Configuration)' == 'Release'">
-        <ItemGroup>
-            <FilesToPackage Include="$(ZippedFiles)" />
-        </ItemGroup>
-        <PackageMod Files="@(FilesToPackage)" OutputPath="..\PPOCeleste.zip" />
-    </Target>
-    
-    <PropertyGroup>
-        <PathMap>$(MSBuildProjectDirectory)=PPOCeleste/</PathMap>
-    </PropertyGroup>
+  <!-- Zip builder -->
+  <UsingTask TaskName="PackageMod" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Files ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <OutputPath ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.IO.Compression" />
+      <Code Type="Fragment" Language="cs">
+      <![CDATA[
+        var projectDir = Path.Combine(@"$(ProjectDir)", "..");
+        projectDir = Uri.UnescapeDataString(projectDir);
 
-    <!-- Inline task used to create a .zip for the mod -->
-    <UsingTask TaskName="PackageMod" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
-        <ParameterGroup>
-            <Files ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
-            <OutputPath ParameterType="System.String" Required="true" />
-        </ParameterGroup>
-        <Task>
-            <Using Namespace="System.IO" />
-            <Using Namespace="System.IO.Compression" />
-            <Code Type="Fragment" Language="cs">
-            <![CDATA[
-                var projectDir = Path.Combine(@"$(ProjectDir)", ".."); // Go one level up, since we're inside the 'Source' directory
-                projectDir = Uri.UnescapeDataString(projectDir);
-            
-                if (File.Exists(OutputPath))
-                    File.Delete(OutputPath);
+        if (File.Exists(OutputPath))
+            File.Delete(OutputPath);
 
-                using (ZipArchive zip = ZipFile.Open(OutputPath, ZipArchiveMode.Create))
-                {
-                    foreach (var file in Files)
-                    {
-                        string filePath = file.GetMetadata("FullPath");
-                        string entryName = GetRelativePath(projectDir, filePath);
-                        
-                        zip.CreateEntryFromFile(filePath, entryName);
-                    }
-                }
-    
-                string GetRelativePath(string fromPath, string toPath)
-                {
-                    if (string.IsNullOrEmpty(fromPath)) throw new ArgumentNullException(nameof(fromPath));
-                    if (string.IsNullOrEmpty(toPath))   throw new ArgumentNullException(nameof(toPath));
-                
-                    Uri fromUri = new Uri(fromPath);
-                    Uri toUri = new Uri(toPath);
-                
-                    if (fromUri.Scheme != toUri.Scheme) { return toPath; } // path can't be made relative.
-                
-                    Uri relativeUri = fromUri.MakeRelativeUri(toUri);
-                    string relativePath = Uri.UnescapeDataString(relativeUri.ToString());
-                
-                    if (toUri.Scheme.Equals("file", StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        relativePath = relativePath.Replace(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                    }
-                
-                    return relativePath;
-                }
-            ]]>
-            </Code>
-        </Task>
-    </UsingTask>
+        using (ZipArchive zip = ZipFile.Open(OutputPath, ZipArchiveMode.Create))
+        {
+            foreach (var file in Files)
+            {
+                string filePath = file.GetMetadata("FullPath");
+                string entryName = GetRelativePath(projectDir, filePath);
+                zip.CreateEntryFromFile(filePath, entryName);
+            }
+        }
+
+        string GetRelativePath(string fromPath, string toPath)
+        {
+            if (string.IsNullOrEmpty(fromPath)) throw new ArgumentNullException(nameof(fromPath));
+            if (string.IsNullOrEmpty(toPath)) throw new ArgumentNullException(nameof(toPath));
+
+            Uri fromUri = new Uri(fromPath);
+            Uri toUri = new Uri(toPath);
+
+            if (fromUri.Scheme != toUri.Scheme)
+                return toPath;
+
+            Uri relativeUri = fromUri.MakeRelativeUri(toUri);
+            string relativePath = Uri.UnescapeDataString(relativeUri.ToString());
+
+            if (toUri.Scheme.Equals("file", StringComparison.InvariantCultureIgnoreCase))
+                relativePath = relativePath.Replace(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            return relativePath;
+        }
+      ]]>
+      </Code>
+    </Task>
+  </UsingTask>
 
 </Project>
