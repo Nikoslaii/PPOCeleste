@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -17,13 +17,13 @@
   </ItemDefinitionGroup>
 
   <ItemGroup>
-    <!-- ✅ TorchSharp stack (CUDA 12.1, PyTorch 2.5.1) -->
-    <PackageReference Include="TorchSharp" Version="0.105.1" />
-    <PackageReference Include="TorchSharp-cuda-12.1" Version="0.105.1" />
-    <PackageReference Include="TorchAudio" Version="0.105.1" />
-    <PackageReference Include="TorchVision" Version="0.105.1" />
+    <PackageReference Include="TorchSharp" Version="*" />
 
-    <!-- 🔧 ML / Mod Tools -->
+
+    <PackageReference Include="libtorch-cuda-12.1-win-x64" Version="*"/>
+
+
+
     <PackageReference Include="Microsoft.ML" Version="4.0.2" />
     <PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.1">
       <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -53,6 +53,18 @@
     </ItemGroup>
     <Copy SourceFiles="@(TorchNativeFiles)" DestinationFolder="..\bin" SkipUnchangedFiles="true" />
   </Target>
+
+  <Target Name="CopyTorchSharpNative" AfterTargets="Build">
+    <ItemGroup>
+      <TorchManaged Include="$(UserProfile)\.nuget\packages\torchsharp\*\lib\net8.0\*.dll" />
+      <TorchNative Include="$(UserProfile)\.nuget\packages\libtorch-*\*\runtimes\win-x64\native\*.*" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(TorchManaged)" DestinationFolder="..\bin" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(TorchNative)" DestinationFolder="..\bin" SkipUnchangedFiles="true" />
+  </Target>
+
+
 
   <Target Name="PackageMod" AfterTargets="CopyFiles"
           Inputs="$(ZippedFiles)" Outputs="..\PPOCeleste.zip"
