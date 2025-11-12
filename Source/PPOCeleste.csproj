@@ -46,7 +46,7 @@
     <Copy SourceFiles="$(OutputPath)\$(AssemblyName).pdb" DestinationFolder="..\bin" />
   </Target>
 
-  <!-- 🧩 Copie automatique des DLL natives TorchSharp -->
+  <!-- 🧩 Copie automatique des DLL natives TorchSharp WIP -->
   <Target Name="CopyTorchSharpNative" AfterTargets="Build">
     <ItemGroup>
       <TorchNativeFiles Include="$(UserProfile)\.nuget\packages\torchsharp-cuda-12.1\0.105.1\runtimes\win-x64\native\*.*" />

@@ -90,12 +90,44 @@ public class PPOCelesteModule : EverestModule
         public override void Render() {
             base.Render();
             #if DEBUG
-                // Optionnel : visualisation en debug
-                foreach (Vector2 p in points)
-                    Draw.Circle(p, 8f, Color.Lime, 4);
-            #endif
+
+            // Couleur principale des nodes
+            Color nodeColor = Color.Lime;
+            Color textColor = Color.White;
+
+            // Dessine les points et leur index
+            for (int i = 0; i < points.Count; i++) {
+                Vector2 p = points[i];
+
+                // Cercle du node
+                Draw.Circle(p, 8f, nodeColor, 4);
+
+                // Texte au centre : l'index
+                ActiveFont.DrawOutline(
+                    i.ToString(),                    // Texte = index
+                    p,                              // Position = node
+                    new Vector2(0.5f, 0.5f),        // Centré sur le point
+                    Vector2.One * 0.5f,             // Taille du texte (facultatif)
+                    textColor,                      // Couleur principale
+                    2f,                             // Épaisseur du contour
+                    Color.Black                     // Couleur du contour
+                );
             }
+
+            // Dessine le vecteur vers le prochain node
+            if (NextVector != Vector2.Zero) {
+                Player player = Scene.Tracker.GetEntity<Player>();
+                if (player != null) {
+                    Vector2 from = player.Center;
+                    Vector2 to = from + NextVector;
+                    Draw.Line(from, to, Color.Yellow);
+                    Draw.Circle(to, 4f, Color.Yellow, 3);
+                }
+            }
+        
+        #endif
         }
+    }
         
 
 
