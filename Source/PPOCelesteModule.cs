@@ -36,14 +36,17 @@ public class PPOCelesteModule : EverestModule
         private string flag;
         private bool ordered;
         private List<Vector2> points = new List<Vector2>();
-        private int currentIndex = 0;
+        public Vector2 NextVector { get; private set; } = Vector2.Zero;
 
         public ProgressionTracker(EntityData data, Vector2 offset) : base(data.Position + offset) {
             flag = data.Attr("flag", "progress_stage");
             ordered = data.Bool("ordered", true);
 
-            foreach (Vector2 node in data.NodesWithPosition(offset))
-                points.Add(node);
+            // Récupère les positions et attributs des nodes
+            for (int i = 0; i < data.Nodes.Length; i++) {
+                Vector2 pos = data.Nodes[i] + offset;
+                points.Add(pos);
+            }
         }
 
         public override void Update() {
@@ -53,38 +56,59 @@ public class PPOCelesteModule : EverestModule
             if (player == null)
                 return;
 
-            // Vérifie progression actuelle
             int progress = level.Session.GetCounter(flag);
 
             if (ordered) {
-                // Mode "ordre strict"
                 if (progress < points.Count) {
-                    if (Vector2.Distance(player.Center, points[progress]) < 16f) {
+                    Vector2 nextPoint = points[progress];
+                    float distance = Vector2.Distance(player.Center, nextPoint);
+
+                    NextVector = nextPoint - player.Center;
+
+                    if (distance < 16f) {
                         level.Session.SetCounter(flag, progress + 1);
                         if (progress + 1 == points.Count)
                             level.Session.SetFlag(flag + "_done", true);
                     }
+                } else {
+                    NextVector = Vector2.Zero;
                 }
             } else {
-                // Mode "désordre"
+                Vector2? closest = null;
+                float bestDist = float.MaxValue;
+
                 for (int i = 0; i < points.Count; i++) {
-                    if (Vector2.Distance(player.Center, points[i]) < 16f && progress < points.Count) {
-                        string nodeFlag = $"{flag}_{i}";
-                        if (!level.Session.GetFlag(nodeFlag)) {
+                    string nodeFlag = $"{flag}_{i}";
+                    if (!level.Session.GetFlag(nodeFlag)) {
+                        float d = Vector2.Distance(player.Center, points[i]);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            closest = points[i];
+                        }
+
+                        if (d < 16f) {
                             level.Session.SetFlag(nodeFlag, true);
-                            progress++;
-                            level.Session.SetCounter(flag, progress);
+                            int visited = CountVisited(level);
+                            level.Session.SetCounter(flag, visited);
+                            if (visited == points.Count)
+                                level.Session.SetFlag(flag + "_done", true);
                         }
                     }
                 }
-                // Vérifie si tous visités
-                bool allVisited = true;
-                for (int i = 0; i < points.Count; i++)
-                    if (!level.Session.GetFlag($"{flag}_{i}")) allVisited = false;
 
-                if (allVisited)
-                    level.Session.SetFlag(flag + "_done", true);
+                if (closest.HasValue)
+                    NextVector = closest.Value - player.Center;
+                else
+                    NextVector = Vector2.Zero;
             }
+        }
+
+        private int CountVisited(Level level) {
+            int count = 0;
+            for (int i = 0; i < points.Count; i++)
+                if (level.Session.GetFlag($"{flag}_{i}"))
+                    count++;
+            return count;
         }
 
         public override void Render() {
