@@ -7,7 +7,10 @@
     <LangVersion>latest</LangVersion>
     <CelestePrefix Condition="'$(CelestePrefix)' == '' And Exists('..\..\..\Celeste.dll')">..\..\..</CelestePrefix>
     <CelestePrefix Condition="'$(CelestePrefix)' == ''">lib-stripped</CelestePrefix>
-    <ZippedFiles>..\everest.yaml;..\bin\**\*.*;..\Audio\**\*.*;..\Dialog\**\*.*;..\Graphics\**\*.*;..\Ahorn\**\*.*;..\Loenn\**\*.*</ZippedFiles>
+    
+    <!-- Ajout de lib-native dans les fichiers à zipper -->
+    <ZippedFiles>..\everest.yaml;..\bin\**\*.*;..\Audio\**\*.*;..\Dialog\**\*.*;..\Graphics\**\*.*;..\Ahorn\**\*.*;..\Loenn\**\*.*;..\lib-native\**\*.*</ZippedFiles>
+    
     <Platforms>x64</Platforms>
   </PropertyGroup>
 
@@ -17,28 +20,29 @@
   </ItemDefinitionGroup>
 
   <ItemGroup>
-    <PackageReference Include="TorchSharp" Version="*" />
-
-
-    <PackageReference Include="libtorch-cuda-12.1-win-x64" Version="*"/>
-
-
-
+    <PackageReference Include="CelesteAnalyzer" Version="*" />
+    <PackageReference Include="CelesteMod.Publicizer" Version="*" CelesteAssembly="$(CelestePrefix)\Celeste.dll" />
     <PackageReference Include="Microsoft.ML" Version="4.0.2" />
     <PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.1">
       <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="MonoMod.Patcher" Version="25.0.0-prerelease.2" />
-    <PackageReference Include="CelesteAnalyzer" Version="*" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    
+    <!-- 
+      IMPORTANT : Utilisation de la version CUDA pour l'accélération GPU.
+      GeneratePathProperty="true" permet de créer une variable $(PkgTorchSharp) pour trouver le chemin.
+    -->
+    <PackageReference Include="TorchSharp" Version="0.105.1" GeneratePathProperty="true" />
+    <PackageReference Include="libtorch-cuda-12.1-win-x64" Version="2.5.1" GeneratePathProperty="true" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CelesteMod.Publicizer" Version="*" CelesteAssembly="$(CelestePrefix)\Celeste.dll" />
     <Reference Include="$(CelestePrefix)\MMHOOK_Celeste.dll" Private="false" />
     <Reference Include="$(CelestePrefix)\FNA.dll" Private="false" />
   </ItemGroup>
 
+  <!-- Copie standard du DLL du mod -->
   <Target Name="CopyFiles" AfterTargets="Build"
           Inputs="$(OutputPath)\$(AssemblyName).dll;$(OutputPath)\$(AssemblyName).pdb"
           Outputs="..\bin\$(AssemblyName).dll;..\bin\$(AssemblyName).pdb">
@@ -46,27 +50,34 @@
     <Copy SourceFiles="$(OutputPath)\$(AssemblyName).pdb" DestinationFolder="..\bin" />
   </Target>
 
-  <!-- 🧩 Copie automatique des DLL natives TorchSharp WIP -->
+  <!-- 
+    🧩 Copie automatique des DLL natives TorchSharp 
+    Elles vont dans le dossier "../lib-native" pour être zippées proprement ensuite.
+  -->
   <Target Name="CopyTorchSharpNative" AfterTargets="Build">
+    <Message Text="Copie des librairies natives TorchSharp..." Importance="high" />
+    
+    <!-- Récupération dynamique des fichiers depuis le cache NuGet -->
     <ItemGroup>
-      <TorchNativeFiles Include="$(UserProfile)\.nuget\packages\torchsharp-cuda-12.1\0.105.1\runtimes\win-x64\native\*.*" />
+      <TorchNativeFiles Include="$(Pkglibtorch_cuda_12_1_win_x64)\runtimes\win-x64\native\*.*" />
+      <TorchManagedFiles Include="$(PkgTorchSharp)\lib\net8.0\*.dll" />
     </ItemGroup>
-    <Copy SourceFiles="@(TorchNativeFiles)" DestinationFolder="..\bin" SkipUnchangedFiles="true" />
+    
+    <!-- Création du dossier si inexistant -->
+    <MakeDir Directories="..\lib-native" />
+    
+    <!-- Copie des fichiers natifs (libtorch) -->
+    <Copy SourceFiles="@(TorchNativeFiles)" DestinationFolder="..\lib-native" SkipUnchangedFiles="true" />
+    
+    <!-- Copie des DLLs managées (TorchSharp.dll) dans bin pour le loader -->
+    <Copy SourceFiles="@(TorchManagedFiles)" DestinationFolder="..\bin" SkipUnchangedFiles="true" />
+    
+    <!-- Copie également dans lib-native pour le pré-chargement manuel -->
+    <Copy SourceFiles="@(TorchManagedFiles)" DestinationFolder="..\lib-native" SkipUnchangedFiles="true" />
   </Target>
 
-  <Target Name="CopyTorchSharpNative" AfterTargets="Build">
-    <ItemGroup>
-      <TorchManaged Include="$(UserProfile)\.nuget\packages\torchsharp\*\lib\net8.0\*.dll" />
-      <TorchNative Include="$(UserProfile)\.nuget\packages\libtorch-*\*\runtimes\win-x64\native\*.*" />
-    </ItemGroup>
-
-    <Copy SourceFiles="@(TorchManaged)" DestinationFolder="..\bin" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(TorchNative)" DestinationFolder="..\bin" SkipUnchangedFiles="true" />
-  </Target>
-
-
-
-  <Target Name="PackageMod" AfterTargets="CopyFiles"
+  <!-- Zip builder -->
+  <Target Name="PackageMod" AfterTargets="CopyFiles;CopyTorchSharpNative"
           Inputs="$(ZippedFiles)" Outputs="..\PPOCeleste.zip"
           Condition="'$(Configuration)' == 'Release'">
     <ItemGroup>
@@ -79,7 +90,7 @@
     <PathMap>$(MSBuildProjectDirectory)=PPOCeleste/</PathMap>
   </PropertyGroup>
 
-  <!-- Zip builder -->
+  <!-- Tâche Inline pour créer le ZIP -->
   <UsingTask TaskName="PackageMod" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
       <Files ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
@@ -101,6 +112,9 @@
             foreach (var file in Files)
             {
                 string filePath = file.GetMetadata("FullPath");
+                // Protection contre les fichiers manquants
+                if(!File.Exists(filePath)) continue;
+
                 string entryName = GetRelativePath(projectDir, filePath);
                 zip.CreateEntryFromFile(filePath, entryName);
             }

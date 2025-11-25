@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices;
 using Celeste;
 using Celeste.Mod.Entities;
 using Microsoft.Xna.Framework;
@@ -31,19 +33,83 @@ public class PPOCelesteModule : EverestModule
     }
     
 
+
+    public static class TorchLoader {
+
+        // Importation de l'API Windows pour charger manuellement une DLL
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern IntPtr LoadLibrary(string libname);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern bool FreeLibrary(IntPtr hModule);
+
+        // Liste des DLLs natives requises par TorchSharp (dans l'ordre de dépendance si possible)
+        private static readonly string[] NativeLibs = {
+            "c10.dll",
+            "libtorch_cuda.dll", // Version GPU
+            "libtorch.dll",
+            "TorchSharp.dll"    // Parfois nécessaire de précharger le wrapper natif
+        };
+    
+
+        public static void LoadNativeLibs(EverestModuleMetadata meta) {
+            // 1. Définir le dossier de destination dans le Cache d'Everest
+            string cachePath = Path.Combine(Everest.Loader.PathCache, meta.Name, "native-libs");
+            if (!Directory.Exists(cachePath)) Directory.CreateDirectory(cachePath);
+
+            Logger.Log(LogLevel.Info, "PPOCeleste", $"Extraction des libs TorchSharp vers : {cachePath}");
+
+            foreach (var libName in NativeLibs) {
+                string destPath = Path.Combine(cachePath, libName);
+                
+                // 2. Extraction : On récupère le fichier depuis le Mod (Zip ou Dossier)
+                // Le chemin interne doit correspondre à ton dossier créé à l'étape 2 (lib-native)
+                string internalPath = Path.Combine("lib-native", libName).Replace("\\", "/");
+
+                if (Everest.Content.TryGet(internalPath, out var asset)) {
+                    // On n'écrase le fichier que s'il est plus récent ou absent
+                    if (!File.Exists(destPath)) {
+                        using (var stream = asset.Stream) 
+                        using (var fileStream = File.Create(destPath)) {
+                            stream.CopyTo(fileStream);
+                        }
+                    }
+                
+                    // 3. Chargement explicite
+                    IntPtr handle = LoadLibrary(destPath);
+                    if (handle == IntPtr.Zero) {
+                        int errorCode = Marshal.GetLastWin32Error();
+                        Logger.Log(LogLevel.Error, "PPOCeleste", $"Échec du chargement de {libName}. Code erreur Windows: {errorCode}");
+                    } else {
+                        Logger.Log(LogLevel.Verbose, "PPOCeleste", $"Chargé avec succès : {libName}");
+                    }
+                } else {
+                    Logger.Log(LogLevel.Warn, "PPOCeleste", $"Impossible de trouver {internalPath} dans le mod !");
+                }
+            }
+        }
+    }
+
+
+
+
+
     [CustomEntity("CelesteCustom/progressionTracker")]
     public class ProgressionTracker : Entity {
         private string flag;
         private bool ordered;
         private List<Vector2> points = new List<Vector2>();
-        public Vector2 NextVector { get; private set; } = Vector2.Zero;
+        public Vector2 NextVector { get; private set; } = Vector2.Zero; // vecteur vers le prochains points
 
         public ProgressionTracker(EntityData data, Vector2 offset) : base(data.Position + offset) {
             flag = data.Attr("flag", "progress_stage");
             ordered = data.Bool("ordered", true);
 
+            Tag |= Tags.Global | Tags.Persistent; // permet de garder chargé l'entité dans tout le niveau
+
             // Récupère les positions et attributs des nodes
-            for (int i = 0; i < data.Nodes.Length; i++) {
+            for (int i = 0; i < data.Nodes.Length; i++)
+            {
                 Vector2 pos = data.Nodes[i] + offset;
                 points.Add(pos);
             }
@@ -159,27 +225,35 @@ public class PPOCelesteModule : EverestModule
 
     public override void Load()//lancé au chargement du mod 
     {
-        
-        //Hooks.Load();
+        try {
+            // On passe les métadonnées pour savoir où extraire
+            TorchLoader.LoadNativeLibs(Metadata);
+        } catch (Exception e) {
+            Logger.Log(LogLevel.Error, "PPOCeleste", "Erreur lors de l'init de Torch : " + e.ToString());
+        }
+
+
+
+        Hooks.Load();
 
     }
 
     public override void Initialize()//lancé après le chargement 
     {
-        //ppo = new PPOTorch();
+        ppo = new PPOTorch();
 
-        //ppo.Start();
+        ppo.Start();
     }
 
     public override void Unload()//lancé au déchargement du mod
     {
-        //Hooks?.Unload();
+        Hooks.Unload();
         ppo?.Stop();
     }
 
     public void SendObsToPPO(Dictionary<string, object> obs)//liens entre hooks et ppo
     {
-        //ppo.ReceiveObs(obs);
+        ppo.ReceiveObs(obs);
     }
 
     public Dictionary<string, bool> GetActionFromPPO()
