@@ -5,12 +5,11 @@
     <AssemblyName>PPOCeleste</AssemblyName>
     <RootNamespace>Celeste.Mod.PPOCeleste</RootNamespace>
     <LangVersion>latest</LangVersion>
+    
     <CelestePrefix Condition="'$(CelestePrefix)' == '' And Exists('..\..\..\Celeste.dll')">..\..\..</CelestePrefix>
     <CelestePrefix Condition="'$(CelestePrefix)' == ''">lib-stripped</CelestePrefix>
     
-    <!-- Ajout de lib-native dans les fichiers à zipper -->
     <ZippedFiles>..\everest.yaml;..\bin\**\*.*;..\Audio\**\*.*;..\Dialog\**\*.*;..\Graphics\**\*.*;..\Ahorn\**\*.*;..\Loenn\**\*.*;..\lib-native\**\*.*</ZippedFiles>
-    
     <Platforms>x64</Platforms>
   </PropertyGroup>
 
@@ -28,13 +27,9 @@
     </PackageReference>
     <PackageReference Include="MonoMod.Patcher" Version="25.0.0-prerelease.2" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    
-    <!-- 
-      IMPORTANT : Utilisation de la version CUDA pour l'accélération GPU.
-      GeneratePathProperty="true" permet de créer une variable $(PkgTorchSharp) pour trouver le chemin.
-    -->
-    <PackageReference Include="TorchSharp" Version="0.105.1" GeneratePathProperty="true" />
-    <PackageReference Include="libtorch-cuda-12.1-win-x64" Version="2.5.1" GeneratePathProperty="true" />
+
+    <PackageReference Include="TorchSharp" Version="0.105.1" />
+    <PackageReference Include="libtorch-cuda-12.1-win-x64" Version="2.5.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,41 +37,40 @@
     <Reference Include="$(CelestePrefix)\FNA.dll" Private="false" />
   </ItemGroup>
 
-  <!-- Copie standard du DLL du mod -->
-  <Target Name="CopyFiles" AfterTargets="Build"
-          Inputs="$(OutputPath)\$(AssemblyName).dll;$(OutputPath)\$(AssemblyName).pdb"
-          Outputs="..\bin\$(AssemblyName).dll;..\bin\$(AssemblyName).pdb">
+  <Target Name="CopyFiles" AfterTargets="Build">
     <Copy SourceFiles="$(OutputPath)\$(AssemblyName).dll" DestinationFolder="..\bin" />
     <Copy SourceFiles="$(OutputPath)\$(AssemblyName).pdb" DestinationFolder="..\bin" />
   </Target>
 
-  <!-- 
-    🧩 Copie automatique des DLL natives TorchSharp 
-    Elles vont dans le dossier "../lib-native" pour être zippées proprement ensuite.
-  -->
   <Target Name="CopyTorchSharpNative" AfterTargets="Build">
-    <Message Text="Copie des librairies natives TorchSharp..." Importance="high" />
     
-    <!-- Récupération dynamique des fichiers depuis le cache NuGet -->
+    <PropertyGroup>
+      <NugetStore Condition="'$(NuGetPackageRoot)' == ''">$(UserProfile)\.nuget\packages</NugetStore>
+      <NugetStore Condition="'$(NuGetPackageRoot)' != ''">$(NuGetPackageRoot)</NugetStore>
+
+      <LibTorchSource>$(NugetStore)\libtorch-cuda-12.1-win-x64\2.5.1*\runtimes\win-x64\native</LibTorchSource>
+      <TorchSharpSource>$(NugetStore)\torchsharp\0.105.1\lib\net6.0</TorchSharpSource>
+    </PropertyGroup>
+
+    <Message Text="🔍 Recherche des DLLs natives dans : $(LibTorchSource)" Importance="high" />
+
     <ItemGroup>
-      <TorchNativeFiles Include="$(Pkglibtorch_cuda_12_1_win_x64)\runtimes\win-x64\native\*.*" />
-      <TorchManagedFiles Include="$(PkgTorchSharp)\lib\net8.0\*.dll" />
+      <TorchNativeFiles Include="$(LibTorchSource)\*.dll" />
+      <TorchManagedFiles Include="$(TorchSharpSource)\*.dll" />
     </ItemGroup>
-    
-    <!-- Création du dossier si inexistant -->
+
     <MakeDir Directories="..\lib-native" />
-    
-    <!-- Copie des fichiers natifs (libtorch) -->
+    <MakeDir Directories="..\bin" />
+
+    <Error Condition="'@(TorchNativeFiles)' == ''" Text="❌ ERREUR : Aucune DLL native trouvée dans $(LibTorchSource). Vérifie que le paquet est bien téléchargé." />
+
     <Copy SourceFiles="@(TorchNativeFiles)" DestinationFolder="..\lib-native" SkipUnchangedFiles="true" />
-    
-    <!-- Copie des DLLs managées (TorchSharp.dll) dans bin pour le loader -->
+    <Copy SourceFiles="@(TorchNativeFiles)" DestinationFolder="..\bin" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(TorchManagedFiles)" DestinationFolder="..\bin" SkipUnchangedFiles="true" />
-    
-    <!-- Copie également dans lib-native pour le pré-chargement manuel -->
-    <Copy SourceFiles="@(TorchManagedFiles)" DestinationFolder="..\lib-native" SkipUnchangedFiles="true" />
+
+    <Message Text="✅ Copie terminée : $(LibTorchSource) -> ../bin" Importance="high" />
   </Target>
 
-  <!-- Zip builder -->
   <Target Name="PackageMod" AfterTargets="CopyFiles;CopyTorchSharpNative"
           Inputs="$(ZippedFiles)" Outputs="..\PPOCeleste.zip"
           Condition="'$(Configuration)' == 'Release'">
@@ -90,7 +84,6 @@
     <PathMap>$(MSBuildProjectDirectory)=PPOCeleste/</PathMap>
   </PropertyGroup>
 
-  <!-- Tâche Inline pour créer le ZIP -->
   <UsingTask TaskName="PackageMod" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
       <Files ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
@@ -103,45 +96,29 @@
       <![CDATA[
         var projectDir = Path.Combine(@"$(ProjectDir)", "..");
         projectDir = Uri.UnescapeDataString(projectDir);
-
-        if (File.Exists(OutputPath))
-            File.Delete(OutputPath);
-
-        using (ZipArchive zip = ZipFile.Open(OutputPath, ZipArchiveMode.Create))
-        {
-            foreach (var file in Files)
-            {
+        if (File.Exists(OutputPath)) File.Delete(OutputPath);
+        using (ZipArchive zip = ZipFile.Open(OutputPath, ZipArchiveMode.Create)) {
+            foreach (var file in Files) {
                 string filePath = file.GetMetadata("FullPath");
-                // Protection contre les fichiers manquants
                 if(!File.Exists(filePath)) continue;
-
                 string entryName = GetRelativePath(projectDir, filePath);
                 zip.CreateEntryFromFile(filePath, entryName);
             }
         }
-
-        string GetRelativePath(string fromPath, string toPath)
-        {
+        string GetRelativePath(string fromPath, string toPath) {
             if (string.IsNullOrEmpty(fromPath)) throw new ArgumentNullException(nameof(fromPath));
             if (string.IsNullOrEmpty(toPath)) throw new ArgumentNullException(nameof(toPath));
-
             Uri fromUri = new Uri(fromPath);
             Uri toUri = new Uri(toPath);
-
-            if (fromUri.Scheme != toUri.Scheme)
-                return toPath;
-
+            if (fromUri.Scheme != toUri.Scheme) return toPath;
             Uri relativeUri = fromUri.MakeRelativeUri(toUri);
             string relativePath = Uri.UnescapeDataString(relativeUri.ToString());
-
             if (toUri.Scheme.Equals("file", StringComparison.InvariantCultureIgnoreCase))
                 relativePath = relativePath.Replace(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
             return relativePath;
         }
       ]]>
       </Code>
     </Task>
   </UsingTask>
-
 </Project>

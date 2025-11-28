@@ -80,7 +80,7 @@ namespace Celeste.Mod.PPOCeleste
                     count++;
                 }
 
-                //construction des 
+                //construction des ob
                 obs["x"] = lastPlayer.Position.X;
                 obs["y"] = lastPlayer.Position.Y;
                 obs["vx"] = lastPlayer.Speed.X;

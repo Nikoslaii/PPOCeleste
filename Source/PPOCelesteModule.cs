@@ -215,7 +215,7 @@ public class PPOCelesteModule : EverestModule
                 }
             }
         
-        #endif
+            #endif
         }
     }
         
@@ -240,9 +240,9 @@ public class PPOCelesteModule : EverestModule
 
     public override void Initialize()//lancé après le chargement 
     {
-        ppo = new PPOTorch();
+        //ppo = new PPOTorch();
 
-        ppo.Start();
+        //ppo.Start();
     }
 
     public override void Unload()//lancé au déchargement du mod
@@ -253,7 +253,7 @@ public class PPOCelesteModule : EverestModule
 
     public void SendObsToPPO(Dictionary<string, object> obs)//liens entre hooks et ppo
     {
-        ppo.ReceiveObs(obs);
+        //ppo.ReceiveObs(obs);
     }
 
     public Dictionary<string, bool> GetActionFromPPO()
