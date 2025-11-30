@@ -44,16 +44,16 @@ public class PPOCelesteModule : EverestModule
         private static extern bool FreeLibrary(IntPtr hModule);
 
         // Liste des DLLs natives requises par TorchSharp (dans l'ordre de dépendance si possible)
-        private static readonly string[] NativeLibs = {
+        private static readonly string[] NativeLibs = [
             "c10.dll",
             "libtorch_cuda.dll", // Version GPU
             "libtorch.dll",
             "TorchSharp.dll"    // Parfois nécessaire de précharger le wrapper natif
-        };
+        ];
     
 
         public static void LoadNativeLibs(EverestModuleMetadata meta) {
-            // 1. Définir le dossier de destination dans le Cache d'Everest
+            // Définir le dossier de destination dans le Cache d'Everest
             string cachePath = Path.Combine(Everest.Loader.PathCache, meta.Name, "native-libs");
             if (!Directory.Exists(cachePath)) Directory.CreateDirectory(cachePath);
 
@@ -62,20 +62,17 @@ public class PPOCelesteModule : EverestModule
             foreach (var libName in NativeLibs) {
                 string destPath = Path.Combine(cachePath, libName);
                 
-                // 2. Extraction : On récupère le fichier depuis le Mod (Zip ou Dossier)
+                // Extraction : On récupère le fichier depuis le Mod (Zip ou Dossier)
                 // Le chemin interne doit correspondre à ton dossier créé à l'étape 2 (lib-native)
                 string internalPath = Path.Combine("lib-native", libName).Replace("\\", "/");
 
                 if (Everest.Content.TryGet(internalPath, out var asset)) {
                     // On n'écrase le fichier que s'il est plus récent ou absent
                     if (!File.Exists(destPath)) {
-                        using (var stream = asset.Stream) 
-                        using (var fileStream = File.Create(destPath)) {
-                            stream.CopyTo(fileStream);
-                        }
+                        asset.Stream.CopyTo(File.Create(destPath));
                     }
                 
-                    // 3. Chargement explicite
+                    // Chargement explicite
                     IntPtr handle = LoadLibrary(destPath);
                     if (handle == IntPtr.Zero) {
                         int errorCode = Marshal.GetLastWin32Error();
@@ -98,7 +95,7 @@ public class PPOCelesteModule : EverestModule
     public class ProgressionTracker : Entity {
         private string flag;
         private bool ordered;
-        private List<Vector2> points = new List<Vector2>();
+        private List<Vector2> points = [];
         public Vector2 NextVector { get; private set; } = Vector2.Zero; // vecteur vers le prochains points
 
         public ProgressionTracker(EntityData data, Vector2 offset) : base(data.Position + offset) {
@@ -124,57 +121,21 @@ public class PPOCelesteModule : EverestModule
 
             int progress = level.Session.GetCounter(flag);
 
-            if (ordered) {
-                if (progress < points.Count) {
-                    Vector2 nextPoint = points[progress];
-                    float distance = Vector2.Distance(player.Center, nextPoint);
+            
+            if (progress < points.Count) {
+                Vector2 nextPoint = points[progress];
+                float distance = Vector2.Distance(player.Center, nextPoint);
 
-                    NextVector = nextPoint - player.Center;
+                NextVector = nextPoint - player.Center;
 
-                    if (distance < 16f) {
-                        level.Session.SetCounter(flag, progress + 1);
-                        if (progress + 1 == points.Count)
-                            level.Session.SetFlag(flag + "_done", true);
-                    }
-                } else {
-                    NextVector = Vector2.Zero;
+                if (distance < 16f) {
+                    level.Session.SetCounter(flag, progress + 1);
+                    if (progress + 1 == points.Count)
+                        level.Session.SetFlag(flag + "_done", true);
                 }
             } else {
-                Vector2? closest = null;
-                float bestDist = float.MaxValue;
-
-                for (int i = 0; i < points.Count; i++) {
-                    string nodeFlag = $"{flag}_{i}";
-                    if (!level.Session.GetFlag(nodeFlag)) {
-                        float d = Vector2.Distance(player.Center, points[i]);
-                        if (d < bestDist) {
-                            bestDist = d;
-                            closest = points[i];
-                        }
-
-                        if (d < 16f) {
-                            level.Session.SetFlag(nodeFlag, true);
-                            int visited = CountVisited(level);
-                            level.Session.SetCounter(flag, visited);
-                            if (visited == points.Count)
-                                level.Session.SetFlag(flag + "_done", true);
-                        }
-                    }
-                }
-
-                if (closest.HasValue)
-                    NextVector = closest.Value - player.Center;
-                else
-                    NextVector = Vector2.Zero;
+                NextVector = Vector2.Zero;
             }
-        }
-
-        private int CountVisited(Level level) {
-            int count = 0;
-            for (int i = 0; i < points.Count; i++)
-                if (level.Session.GetFlag($"{flag}_{i}"))
-                    count++;
-            return count;
         }
 
         public override void Render() {
