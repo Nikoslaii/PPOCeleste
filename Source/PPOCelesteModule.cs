@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using Celeste;
 using Celeste.Mod.Entities;
 using Microsoft.Xna.Framework;
@@ -33,10 +34,6 @@ public class PPOCelesteModule : EverestModule
 
     private PPOAgent ppo;
 
-    private int stepCounter = 0;
-    private const int STEPS_PER_UPDATE = 2048; // PPO standard
-    private const int SAVE_INTERVAL = 10;      // save every 10 updates
-    private int updateCounter = 0;
 
 
     [CustomEntity("CelesteCustom/progressionTracker")]
@@ -84,7 +81,7 @@ public class PPOCelesteModule : EverestModule
                 Vector2 nextPoint = points[progress];
                 float distance = Vector2.Distance(player.Center, nextPoint);
 
-                NextVector = (nextPoint - player.Center).SafeNormalize();
+                NextVector = nextPoint - player.Center;
 
                 if (distance < 16f) {
                     level.Session.SetCounter(flag, progress + 1);
@@ -144,11 +141,14 @@ public class PPOCelesteModule : EverestModule
     }
 
 
+    public static ProgressionTracker GetTracker(Scene Scene) {
+    return Scene.Tracker.GetEntity<ProgressionTracker>();
+    }
+
+
     public override void Load()//lancé au chargement du mod 
     {
         Hooks.Load();
-
-        
 
     }
 
@@ -157,7 +157,20 @@ public class PPOCelesteModule : EverestModule
     public override void Initialize()//lancé après le chargement 
     {
         ppo = new PPOAgent(obsSize: 275, hiddenSizes: [128,64]);
-        ppo.LoadWeights("path/to/weights.json"); // optional
+
+        string weightsPath = Path.Combine(Everest.PathGame, "Mods", "PPOCeleste", "ppo_weights.json");
+
+        if(File.Exists(weightsPath))
+        {
+            ppo.LoadWeights(weightsPath);
+        }
+        else
+        {
+            Logger.Log("PPO", "No weights found, starting fresh.");
+            ppo.SaveWeights(weightsPath);
+        }
+
+
 
         
         OnDeathHook = (orig, self, direction, evenIfInvincible, registerDeathInStats) =>
@@ -179,6 +192,8 @@ public class PPOCelesteModule : EverestModule
     {
         Hooks.Unload();
         On.Celeste.Player.Die -= OnDeathHook;
+        ppo.SaveWeights("path/to/weights.json");
+        ppo = null;
     }
 
     public void SendObsToPPO(Dictionary<string, object> obs, Player player)//liens entre hooks et ppo

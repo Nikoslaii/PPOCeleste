@@ -27,8 +27,7 @@
     </PackageReference>
     <PackageReference Include="MonoMod.Patcher" Version="25.0.0-prerelease.2" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageReference Include="TorchSharp" Version="0.105.1" />
-    <PackageReference Include="TorchSharp-cuda-windows" Version="0.105.1" />
+
   </ItemGroup>
 
   <ItemGroup>
@@ -36,10 +35,6 @@
     <Reference Include="$(CelestePrefix)\FNA.dll" Private="false" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Accord.Neuroevolution" Version="3.8.0" />
-    <PackageReference Include="Accord.MachineLearning" Version="3.8.0" />
-  </ItemGroup>
 
   <Target Name="CopyNativeDeps" AfterTargets="Build">
     <PropertyGroup>
@@ -47,17 +42,10 @@
       <NugetStore Condition="'$(NuGetPackageRoot)' != ''">$(NuGetPackageRoot)</NugetStore>
     </PropertyGroup>
 
-    <!-- Copier UNIQUEMENT les DLLs CUDA (torchsharp + libtorch-cuda) -->
-    <ItemGroup>
-      <AllNativeDeps Include="$(NugetStore)\torchsharp\*\runtimes\win-x64\native\*.dll" />
-      <AllNativeDeps Include="$(NugetStore)\libtorch-cuda-12.1-win-x64\*\runtimes\win-x64\native\*.dll" />
-    </ItemGroup>
 
     <!-- Copier dans le dossier de build -->
     <Copy SourceFiles="@(AllNativeDeps)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" ContinueOnError="true" />
     
-    <!-- Copier dans lib-native pour le packaging Olympus -->
-    <MakeDir Directories="..\lib-native" />
     <Copy SourceFiles="@(AllNativeDeps)" DestinationFolder="..\lib-native" SkipUnchangedFiles="true" ContinueOnError="true" />
   </Target>
 

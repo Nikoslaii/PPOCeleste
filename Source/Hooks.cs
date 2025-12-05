@@ -8,6 +8,7 @@ comme les input et observations
 using Microsoft.Xna.Framework;
 using Monocle;
 using System.Collections.Generic;
+using static Celeste.Mod.PPOCeleste.PPOCelesteModule;
 
 
 namespace Celeste.Mod.PPOCeleste
@@ -37,9 +38,9 @@ namespace Celeste.Mod.PPOCeleste
                     clock = 0f;//réinitialise la clock  
                     var level = self.Scene as Level;// stoque le niveau actuel
                     var obs = GetObservation(level);//récupère les variables/inputs pour l'entrainement
-                    PPOCelesteModule.Instance.SendObsToPPO(obs,lastPlayer);//envois les inputs a PPOTorsh
+                    Instance.SendObsToPPO(obs,lastPlayer);//envois les inputs a PPOTorsh
 
-                    PPOCelesteModule.Instance.GetActionFromPPO(); // récupère les actions a effectuer
+                    Instance.GetActionFromPPO(); // récupère les actions a effectuer
                     ApplyActions(self);           // applique les actions reçues
 
                 }
@@ -87,7 +88,14 @@ namespace Celeste.Mod.PPOCeleste
                 obs["dashes_left"] = lastPlayer.Dashes;          // nombre de dash restant
                 obs["wallcheck"] = GetWallCheck(lastPlayer);     // si Madeline touche un mur
                 obs["grab"] = lastPlayer.StateMachine.State == Player.StClimb; // si Madeline est en train de grimper
-                obs["progress"] = GetProgress(level, lastPlayer);//progression dans la room par ProgressionTracker
+                ProgressionTracker tracker = GetProgressTracker(level);
+
+                if (tracker != null)
+                    obs["progress"] = tracker.NextVector;
+                else{
+                    
+                    obs["progress"] = Vector2.Zero;//progression dans la room par ProgressionTracker
+                }
                 obs["enemies"] = enemies;                     // liste des ennemies proches (coordonées et tailles)
                 // Matrice 15*15 centrée sur le joueur (0: vide, 1: solide, 2(^)-3(>)-4(v)-5(<): piques)
                 obs["grid"] = GetGrid(level, lastPlayer, 15);
@@ -103,14 +111,23 @@ namespace Celeste.Mod.PPOCeleste
                 || player.CollideCheck<Solid>(player.Position + new Vector2(1, 0)); // droite
         }
 
-        private static float GetProgress(Level level, Player player)
-        {
-            // Exemple simple : progression horizontale dans la room #DOIT CHANGER
-            float minX = level.Bounds.Left;
-            float maxX = level.Bounds.Right;
-            float px = Calc.Clamp(player.Position.X, minX, maxX);
-            return (px - minX) / (maxX - minX);
+
+        
+        private static ProgressionTracker GetProgressTracker(Level level) {
+            ;
+
+            if (level == null)
+                return null;
+            try{
+            
+                return level.Tracker.GetEntity<ProgressionTracker>();
+            }
+            catch{
+                
+            return null;
+            }
         }
+
 
         //fonction pour optenir une grille de "la vision" de l'agent# à optimiser
         private static List<int> GetGrid(Level level, Player player, int gridSize = 15)
@@ -182,7 +199,7 @@ namespace Celeste.Mod.PPOCeleste
         //actione en fonction des output du PPO
         public static void ApplyActions(Player player) 
         {
-            var actions = PPOCelesteModule.Instance.GetActionFromPPO();
+            var actions = Instance.GetActionFromPPO();
 
             if (actions.TryGetValue("left", out bool left) && left)
             {
@@ -201,7 +218,7 @@ namespace Celeste.Mod.PPOCeleste
                 player.Speed.Y += 1; // déplace(direction) Madeline vers le bas
             }
 
-            if (actions.TryGetValue("jump", out bool jump) && jump)
+            if (actions.TryGetValue("jump", out bool jump) && jump && player.OnGround())
             {
                 player.Jump(); // fait sauter Madeline
             }
