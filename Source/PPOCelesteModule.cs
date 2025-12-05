@@ -146,6 +146,40 @@ public class PPOCelesteModule : EverestModule
     }
 
 
+    public static class DrawUtils {
+        public static void Circle(Vector2 center, float radius, Color color, int segments = 12) {
+            Vector2 last = center + new Vector2(radius, 0f);
+            for (int i = 1; i <= segments; i++) {
+                float angle = MathHelper.TwoPi * (i / (float)segments);
+                Vector2 next = center + new Vector2(
+                    (float)Math.Cos(angle) * radius,
+                    (float)Math.Sin(angle) * radius
+                );
+                Draw.Line(last, next, color);
+                last = next;
+            }
+        }
+    }
+
+    private static void DrawActionCircles(Player player, Dictionary<string, bool> actions) 
+    {
+        Vector2 start = player.Position + new Vector2(-10 * actions.Count / 2f, -25f);
+
+        int i = 0;
+        foreach (var kv in actions) {
+            bool active = kv.Value;
+            Vector2 pos = start + new Vector2(i * 12, 0f);
+
+            Color c = active ? Color.LimeGreen : Color.Red;
+            DrawUtils.Circle(pos, 4f, c);
+
+            i++;
+        }
+    }
+
+
+
+
     public override void Load()//lancé au chargement du mod 
     {
         Hooks.Load();
@@ -181,10 +215,21 @@ public class PPOCelesteModule : EverestModule
             RewardSystem.Reset();
 
             return result;
-        };
+        };        
         
-       On.Celeste.Player.Die += OnDeathHook;
+        On.Celeste.Player.Die += OnDeathHook;
 
+
+        On.Celeste.Player.Render += static (orig, self) => {
+            orig(self);
+
+            // On récupère les actions depuis ton agent PPO
+            var actions = Instance.ppo.GetActionFromPPO();
+            if (actions == null)
+                return;
+
+            DrawActionCircles(self, actions);
+        };
 
     }
 
