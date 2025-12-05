@@ -37,7 +37,7 @@ namespace Celeste.Mod.PPOCeleste
                     clock = 0f;//réinitialise la clock  
                     var level = self.Scene as Level;// stoque le niveau actuel
                     var obs = GetObservation(level);//récupère les variables/inputs pour l'entrainement
-                    PPOCelesteModule.Instance.SendObsToPPO(obs);//envois les inputs a PPOTorsh
+                    PPOCelesteModule.Instance.SendObsToPPO(obs,lastPlayer);//envois les inputs a PPOTorsh
 
                     PPOCelesteModule.Instance.GetActionFromPPO(); // récupère les actions a effectuer
                     ApplyActions(self);           // applique les actions reçues
@@ -149,7 +149,8 @@ namespace Celeste.Mod.PPOCeleste
                     // Vérifier les spikes (il font moins que une demis case alors il falait chercher autour pour voir le spike)
                     foreach (var p in samplePoints)
                     {
-                        foreach (Spikes spike in level.Tracker.GetEntities<Spikes>()) // vérifie pour chaque spike si il est sur cette case j'ai pas encore plus simple #trouver plus simple
+                        // vérifie pour chaque spike si il est sur cette case j'ai pas encore plus simple #trouver plus simple
+                        foreach (Spikes spike in level.Tracker.GetEntities<Spikes>()) 
                         {
                             if (spike.CollidePoint(p)) // si le point est dans le spike
                             {

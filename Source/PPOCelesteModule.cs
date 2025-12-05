@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Runtime.InteropServices;
+using System.Data;
 using Celeste;
 using Celeste.Mod.Entities;
 using Microsoft.Xna.Framework;
@@ -31,105 +30,69 @@ public class PPOCelesteModule : EverestModule
         Logger.SetLogLevel(nameof(PPOCelesteModule), LogLevel.Info);
 #endif
     }
-    
 
+    private PPOAgent ppo;
 
-    public static class TorchLoader {
-
-        // Importation de l'API Windows pour charger manuellement une DLL
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr LoadLibrary(string libname);
-
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern bool FreeLibrary(IntPtr hModule);
-
-        // Liste des DLLs natives requises par TorchSharp (dans l'ordre de dépendance si possible)
-        private static readonly string[] NativeLibs = [
-            "c10.dll",
-            "libtorch_cuda.dll", // Version GPU
-            "libtorch.dll",
-            "TorchSharp.dll"    // Parfois nécessaire de précharger le wrapper natif
-        ];
-    
-
-        public static void LoadNativeLibs(EverestModuleMetadata meta) {
-            // Définir le dossier de destination dans le Cache d'Everest
-            string cachePath = Path.Combine(Everest.Loader.PathCache, meta.Name, "native-libs");
-            if (!Directory.Exists(cachePath)) Directory.CreateDirectory(cachePath);
-
-            Logger.Log(LogLevel.Info, "PPOCeleste", $"Extraction des libs TorchSharp vers : {cachePath}");
-
-            foreach (var libName in NativeLibs) {
-                string destPath = Path.Combine(cachePath, libName);
-                
-                // Extraction : On récupère le fichier depuis le Mod (Zip ou Dossier)
-                // Le chemin interne doit correspondre à ton dossier créé à l'étape 2 (lib-native)
-                string internalPath = Path.Combine("lib-native", libName).Replace("\\", "/");
-
-                if (Everest.Content.TryGet(internalPath, out var asset)) {
-                    // On n'écrase le fichier que s'il est plus récent ou absent
-                    if (!File.Exists(destPath)) {
-                        asset.Stream.CopyTo(File.Create(destPath));
-                    }
-                
-                    // Chargement explicite
-                    IntPtr handle = LoadLibrary(destPath);
-                    if (handle == IntPtr.Zero) {
-                        int errorCode = Marshal.GetLastWin32Error();
-                        Logger.Log(LogLevel.Error, "PPOCeleste", $"Échec du chargement de {libName}. Code erreur Windows: {errorCode}");
-                    } else {
-                        Logger.Log(LogLevel.Verbose, "PPOCeleste", $"Chargé avec succès : {libName}");
-                    }
-                } else {
-                    Logger.Log(LogLevel.Warn, "PPOCeleste", $"Impossible de trouver {internalPath} dans le mod !");
-                }
-            }
-        }
-    }
-
-
-
+    private int stepCounter = 0;
+    private const int STEPS_PER_UPDATE = 2048; // PPO standard
+    private const int SAVE_INTERVAL = 10;      // save every 10 updates
+    private int updateCounter = 0;
 
 
     [CustomEntity("CelesteCustom/progressionTracker")]
     public class ProgressionTracker : Entity {
         private string flag;
-        private bool ordered;
         private List<Vector2> points = [];
+        private List<int> nodeOnDeathValues = [];  // Ajouter ce champ à la classe
         public Vector2 NextVector { get; private set; } = Vector2.Zero; // vecteur vers le prochains points
 
         public ProgressionTracker(EntityData data, Vector2 offset) : base(data.Position + offset) {
             flag = data.Attr("flag", "progress_stage");
-            ordered = data.Bool("ordered", true);
 
             Tag |= Tags.Global | Tags.Persistent; // permet de garder chargé l'entité dans tout le niveau
 
-            // Récupère les positions et attributs des nodes
+            // Récupère les positions et les propriétés onDeath depuis le dictionnaire Values
             for (int i = 0; i < data.Nodes.Length; i++)
             {
                 Vector2 pos = data.Nodes[i] + offset;
                 points.Add(pos);
+                
+                // Loenn exporte les propriétés des nodes sous la forme "nodeX_propertyName"
+                // Pour le node 0 et la propriété onDeath : "node0_onDeath", etc.
+                string onDeathKey = $"node{i}_onDeath";
+                int onDeathProgress = data.Int(onDeathKey, 0);
+                nodeOnDeathValues.Add(onDeathProgress);
+                
+                Logger.Log(LogLevel.Verbose, "ProgressionTracker", $"Node {i}: position={pos}, onDeath={onDeathProgress}");
             }
         }
 
         public override void Update() {
             base.Update();
+
             Level level = SceneAs<Level>();
             Player player = Scene.Tracker.GetEntity<Player>();
+            
+
+            
             if (player == null)
                 return;
 
             int progress = level.Session.GetCounter(flag);
-
-            
+    
             if (progress < points.Count) {
                 Vector2 nextPoint = points[progress];
                 float distance = Vector2.Distance(player.Center, nextPoint);
 
-                NextVector = nextPoint - player.Center;
+                NextVector = (nextPoint - player.Center).SafeNormalize();
 
                 if (distance < 16f) {
                     level.Session.SetCounter(flag, progress + 1);
+
+                    
+                    Instance.ppo.EndEpisode(RewardSystem.LevelCompleteReward());
+                    RewardSystem.Reset();
+
                     if (progress + 1 == points.Count)
                         level.Session.SetFlag(flag + "_done", true);
                 }
@@ -179,47 +142,57 @@ public class PPOCelesteModule : EverestModule
             #endif
         }
     }
-        
 
-
-    private PPOTorch ppo;
 
     public override void Load()//lancé au chargement du mod 
     {
-        try {
-            // On passe les métadonnées pour savoir où extraire
-            TorchLoader.LoadNativeLibs(Metadata);
-        } catch (Exception e) {
-            Logger.Log(LogLevel.Error, "PPOCeleste", "Erreur lors de l'init de Torch : " + e.ToString());
-        }
-
-
-
         Hooks.Load();
+
+        
 
     }
 
+    private static On.Celeste.Player.hook_Die OnDeathHook;
+
     public override void Initialize()//lancé après le chargement 
     {
-        //ppo = new PPOTorch();
+        ppo = new PPOAgent(obsSize: 275, hiddenSizes: [128,64]);
+        ppo.LoadWeights("path/to/weights.json"); // optional
 
-        //ppo.Start();
+        
+        OnDeathHook = (orig, self, direction, evenIfInvincible, registerDeathInStats) =>
+        {
+            var result = orig(self, direction, evenIfInvincible, registerDeathInStats);
+            
+            Instance.ppo.EndEpisode(RewardSystem.DeathPenalty());
+            RewardSystem.Reset();
+
+            return result;
+        };
+        
+       On.Celeste.Player.Die += OnDeathHook;
+
+
     }
 
     public override void Unload()//lancé au déchargement du mod
     {
         Hooks.Unload();
-        ppo?.Stop();
+        On.Celeste.Player.Die -= OnDeathHook;
     }
 
-    public void SendObsToPPO(Dictionary<string, object> obs)//liens entre hooks et ppo
+    public void SendObsToPPO(Dictionary<string, object> obs, Player player)//liens entre hooks et ppo
     {
-        //ppo.ReceiveObs(obs);
+        ppo.ReceiveObs(obs);
+        float reward = RewardSystem.ComputeReward(obs, player);
+        ppo.StoreReward(reward);
+
     }
 
     public Dictionary<string, bool> GetActionFromPPO()
     {
+        
         return ppo.GetActionFromPPO();
+
     }
 }
-

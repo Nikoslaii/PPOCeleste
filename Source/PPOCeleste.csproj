@@ -27,9 +27,8 @@
     </PackageReference>
     <PackageReference Include="MonoMod.Patcher" Version="25.0.0-prerelease.2" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-
     <PackageReference Include="TorchSharp" Version="0.105.1" />
-    <PackageReference Include="libtorch-cuda-12.1-win-x64" Version="2.5.1" />
+    <PackageReference Include="TorchSharp-cuda-windows" Version="0.105.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -37,43 +36,37 @@
     <Reference Include="$(CelestePrefix)\FNA.dll" Private="false" />
   </ItemGroup>
 
-  <Target Name="CopyFiles" AfterTargets="Build">
-    <Copy SourceFiles="$(OutputPath)\$(AssemblyName).dll" DestinationFolder="..\bin" />
-    <Copy SourceFiles="$(OutputPath)\$(AssemblyName).pdb" DestinationFolder="..\bin" />
-  </Target>
+  <ItemGroup>
+    <PackageReference Include="Accord.Neuroevolution" Version="3.8.0" />
+    <PackageReference Include="Accord.MachineLearning" Version="3.8.0" />
+  </ItemGroup>
 
-  <Target Name="CopyTorchSharpNative" AfterTargets="Build">
-    
+  <Target Name="CopyNativeDeps" AfterTargets="Build">
     <PropertyGroup>
       <NugetStore Condition="'$(NuGetPackageRoot)' == ''">$(UserProfile)\.nuget\packages</NugetStore>
       <NugetStore Condition="'$(NuGetPackageRoot)' != ''">$(NuGetPackageRoot)</NugetStore>
-
-      <LibTorchSource>$(NugetStore)\libtorch-cuda-12.1-win-x64\2.5.1*\runtimes\win-x64\native</LibTorchSource>
-      <TorchSharpSource>$(NugetStore)\torchsharp\0.105.1\lib\net6.0</TorchSharpSource>
     </PropertyGroup>
 
-    <Message Text="🔍 Recherche des DLLs natives dans : $(LibTorchSource)" Importance="high" />
-
+    <!-- Copier UNIQUEMENT les DLLs CUDA (torchsharp + libtorch-cuda) -->
     <ItemGroup>
-      <TorchNativeFiles Include="$(LibTorchSource)\*.dll" />
-      <TorchManagedFiles Include="$(TorchSharpSource)\*.dll" />
+      <AllNativeDeps Include="$(NugetStore)\torchsharp\*\runtimes\win-x64\native\*.dll" />
+      <AllNativeDeps Include="$(NugetStore)\libtorch-cuda-12.1-win-x64\*\runtimes\win-x64\native\*.dll" />
     </ItemGroup>
 
+    <!-- Copier dans le dossier de build -->
+    <Copy SourceFiles="@(AllNativeDeps)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" ContinueOnError="true" />
+    
+    <!-- Copier dans lib-native pour le packaging Olympus -->
     <MakeDir Directories="..\lib-native" />
-    <MakeDir Directories="..\bin" />
-
-    <Error Condition="'@(TorchNativeFiles)' == ''" Text="❌ ERREUR : Aucune DLL native trouvée dans $(LibTorchSource). Vérifie que le paquet est bien téléchargé." />
-
-    <Copy SourceFiles="@(TorchNativeFiles)" DestinationFolder="..\lib-native" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(TorchNativeFiles)" DestinationFolder="..\bin" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(TorchManagedFiles)" DestinationFolder="..\bin" SkipUnchangedFiles="true" />
-
-    <Message Text="✅ Copie terminée : $(LibTorchSource) -> ../bin" Importance="high" />
+    <Copy SourceFiles="@(AllNativeDeps)" DestinationFolder="..\lib-native" SkipUnchangedFiles="true" ContinueOnError="true" />
   </Target>
 
-  <Target Name="PackageMod" AfterTargets="CopyFiles;CopyTorchSharpNative"
-          Inputs="$(ZippedFiles)" Outputs="..\PPOCeleste.zip"
-          Condition="'$(Configuration)' == 'Release'">
+  <Target Name="CopyDll" AfterTargets="CopyNativeDeps">
+    <Copy SourceFiles="$(OutputPath)\$(AssemblyName).dll" DestinationFolder="..\bin" />
+    <Copy SourceFiles="$(OutputPath)\$(AssemblyName).pdb" DestinationFolder="..\bin" SkipUnchangedFiles="true" Condition="Exists('$(OutputPath)\$(AssemblyName).pdb')" />
+  </Target>
+
+  <Target Name="PackageMod" AfterTargets="CopyDll" Inputs="$(ZippedFiles)" Outputs="..\PPOCeleste.zip" Condition="'$(Configuration)' == 'Release'">
     <ItemGroup>
       <FilesToPackage Include="$(ZippedFiles)" />
     </ItemGroup>
@@ -114,11 +107,12 @@
             Uri relativeUri = fromUri.MakeRelativeUri(toUri);
             string relativePath = Uri.UnescapeDataString(relativeUri.ToString());
             if (toUri.Scheme.Equals("file", StringComparison.InvariantCultureIgnoreCase))
-                relativePath = relativePath.Replace(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+              relativePath = relativePath.Replace(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             return relativePath;
         }
       ]]>
       </Code>
     </Task>
   </UsingTask>
+
 </Project>
