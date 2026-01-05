@@ -11,7 +11,7 @@ namespace Celeste.Mod.PPOCeleste
     {
         // Configuration
         public int ObservationSize { get; private set; }
-        public int ActionCount { get; } = 7; // left,right,up,down,jump,dash,grab
+        public int ActionCount { get; } = 8; // left,right,up,down,jump,dash,grab,duck
         public int[] HiddenSizes { get; private set; }
 
         // Hyperparameters (tweakable)
@@ -244,10 +244,18 @@ namespace Celeste.Mod.PPOCeleste
 
         // ---------- Environment hooks ----------
         public void StoreReward(float r) { rewBuf.Add(r); doneBuf.Add(0f); }
+
+        public void AddReward(float r) {
+             if (rewBuf.Count > 0) rewBuf[rewBuf.Count - 1] += r;
+        }
+
         public void EndEpisode(float finalReward = 0f)
         {
             if (rewBuf.Count < obsBuf.Count) { rewBuf.Add(finalReward); doneBuf.Add(1f); }
-            else if (doneBuf.Count > 0) doneBuf[doneBuf.Count - 1] = 1f;
+            else if (doneBuf.Count > 0) { 
+                doneBuf[doneBuf.Count - 1] = 1f;
+                rewBuf[rewBuf.Count - 1] += finalReward;
+            }
         }
 
         // ---------- Training (PPO with GAE) ----------
@@ -396,7 +404,22 @@ namespace Celeste.Mod.PPOCeleste
             var txt = File.ReadAllText(path);
             var obj = JsonSerializer.Deserialize<Serializable>(txt);
             if (obj == null) throw new Exception("Invalid weights file");
-            if (obj.Hidden.Length != HiddenSizes.Length) throw new Exception("Architecture mismatch");
+            
+            // Validate architecture dimensions
+            bool mismatch = obj.Hidden.Length != HiddenSizes.Length;
+            if (!mismatch) {
+                // Check if last hidden layer connects to current ActionCount
+                int lastHidden = HiddenSizes.Last();
+                if (obj.PolicyW.Length != ActionCount * lastHidden || obj.PolicyB.Length != ActionCount) 
+                    mismatch = true;
+            }
+
+            if (mismatch) {
+                // Dimensions don't match (e.g. ActionCount changed), reset network
+                InitNetwork();
+                return;
+            }
+
             W = obj.Weights.ToList(); B = obj.Biases.ToList(); policyW = obj.PolicyW; policyB = obj.PolicyB; valueW = obj.ValueW; valueB = obj.ValueB;
             // reinit Adam buffers
             mW = W.Select(w => new float[w.Length]).ToList(); vW = W.Select(w => new float[w.Length]).ToList();

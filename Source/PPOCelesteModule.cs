@@ -34,9 +34,17 @@ public class PPOCelesteModule : EverestModule
 
     private PPOAgent ppo;
 
+    // Episode management (public for access from Hooks)
+    public float episodeTimer = 0f;
+    public int episodeCount = 0;
+    public float totalReward = 0f;
+    public bool isResetting = false; // Prevent double EndEpisode from death hook
+    public const float EPISODE_TIMEOUT = 45f; // 45 seconds max per episode
+    public const int TRAIN_EVERY_N_EPISODES = 10; // Train after every 10 episodes
 
 
     [CustomEntity("CelesteCustom/progressionTracker")]
+    [Tracked]
     public class ProgressionTracker : Entity {
         private string flag;
         private List<Vector2> points = [];
@@ -78,10 +86,17 @@ public class PPOCelesteModule : EverestModule
                     level.Session.SetCounter(flag, progress + 1); // incrémente le progrès
 
                     // Donne la récompense à l'agent PPO
-                    Instance.ppo.EndEpisode(RewardSystem.LevelCompleteReward());
+                    Instance.PPO.AddReward(RewardSystem.LevelCompleteReward());
+                    
+                    // Reset timer to give more time after reaching checkpoint
+                    Instance.episodeTimer = 0f;
 
-                    if (progress + 1 >= points.Count)
+                    if (progress + 1 >= points.Count) {
                         level.Session.SetFlag(flag + "_done", true);
+                        // End episode when all checkpoints completed
+                        Instance.PPO.EndEpisode(0f); // Mark done
+                        Instance.ResetEpisode(player, true);
+                    }
                 }
             } else {
                 NextVector = Vector2.Zero;
@@ -132,7 +147,42 @@ public class PPOCelesteModule : EverestModule
 
 
     public static ProgressionTracker GetTracker(Scene Scene) {
-    return Scene.Tracker.GetEntity<ProgressionTracker>();
+        return Scene.Tracker.GetEntity<ProgressionTracker>();
+    }
+
+    public void ResetEpisode(Player player, bool completed = false) {
+        isResetting = true; // Set flag to prevent death hook recursion
+        episodeCount++;
+        
+        // Log episode statistics
+        Logger.Log("PPO", $"Episode {episodeCount} ended - Time: {episodeTimer:F2}s, Reward: {totalReward:F2}, Status: {(completed ? "COMPLETED" : "TIMEOUT/DEATH")}");
+        
+        // Trigger training every N episodes
+        if (episodeCount % TRAIN_EVERY_N_EPISODES == 0) {
+            Logger.Log("PPO", $"Training after {episodeCount} episodes...");
+            ppo.UpdatePolicy();
+            
+            // Save updated weights
+            string weightsPath = Path.Combine(Everest.PathGame, "Mods", "PPOCeleste", "ppo_weights.json");
+            ppo.SaveWeights(weightsPath);
+            Logger.Log("PPO", "Weights saved.");
+        }
+        
+        // Reset episode state
+        episodeTimer = 0f;
+        totalReward = 0f;
+        
+        // Reset level if player is alive
+        if (player != null && !player.Dead) {
+            var level = player.Scene as Level;
+            if (level != null) {
+                // Reset to beginning of level
+                level.Session.RespawnPoint = level.Session.LevelData.Spawns[0];
+                player.Die(Vector2.Zero);
+            }
+        }
+        
+        isResetting = false; // Clear flag after reset complete
     }
 
 
@@ -201,7 +251,10 @@ public class PPOCelesteModule : EverestModule
         {
             var result = orig(self, direction, evenIfInvincible, registerDeathInStats);
             
-            Instance.ppo.EndEpisode(RewardSystem.DeathPenalty());
+            // Only record death penalty if not already resetting (prevents double EndEpisode)
+            if (!Instance.isResetting) {
+                Instance.ppo.EndEpisode(RewardSystem.DeathPenalty());
+            }
 
             return result;
         };        
@@ -236,7 +289,7 @@ public class PPOCelesteModule : EverestModule
         ppo.ReceiveObs(obs);
         float reward = RewardSystem.ComputeReward(obs);
         ppo.StoreReward(reward);
-
+        totalReward += reward; // Track cumulative reward
     }
 
     public Dictionary<string, bool> GetActionFromPPO()
@@ -245,4 +298,7 @@ public class PPOCelesteModule : EverestModule
         return ppo.GetActionFromPPO(); // 
 
     }
+
+    // Public access to PPO agent for episode management
+    public PPOAgent PPO => ppo;
 }

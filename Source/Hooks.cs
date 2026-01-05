@@ -32,6 +32,18 @@ namespace Celeste.Mod.PPOCeleste
 
                 orig(self);//fonction originel de On.Celeste.Player.hook_Update soit player.update()
 
+                // Episode timer tracking
+                if (!self.Dead) {
+                    Instance.episodeTimer += Engine.RawDeltaTime;
+                    
+                    // Check for timeout (45 seconds)
+                    if (Instance.episodeTimer >= EPISODE_TIMEOUT) {
+                        Instance.PPO.EndEpisode(RewardSystem.TimeoutPenalty());
+                        Instance.ResetEpisode(self, false);
+                        return; // Skip this frame after reset
+                    }
+                }
+
                 // Timer pour 20Hz
                 clock += Engine.RawDeltaTime;// mets à jour le temps passer
                 if (clock >= SendInterval)//compare pour vérifier que ça fait 1/20 seconde
@@ -42,8 +54,8 @@ namespace Celeste.Mod.PPOCeleste
                     var obs = GetObservation(level);//récupère les variables/inputs pour l'entrainement
                     Instance.SendObsToPPO(obs);//envois les inputs a PPOTorsh
 
-                    Instance.GetActionFromPPO(); // récupère les actions a effectuer
-                    ApplyActions(self);           // applique les actions reçues
+                    var actions = Instance.GetActionFromPPO(); // récupère les actions a effectuer
+                    ApplyActions(self, actions);           // applique les actions reçues
 
                 }
             };
@@ -212,9 +224,10 @@ namespace Celeste.Mod.PPOCeleste
         }
 
         //actione en fonction des output du PPO
-        public static void ApplyActions(Player player) 
+        public static void ApplyActions(Player player, Dictionary<string, bool> actions) 
         {
-            Dictionary<string, bool> actions = Instance.GetActionFromPPO();
+            // Dictionary<string, bool> actions = Instance.GetActionFromPPO(); // REMOVED: Passed as argument to avoid double-sampling
+
 
             if (actions.TryGetValue("left", out bool left) && left)
             {

@@ -57,6 +57,8 @@ namespace Celeste.Mod.PPOCeleste {
 
         public static float DeathPenalty() => -15f;
 
+        public static float TimeoutPenalty() => -10f; // Less severe than death, but still negative
+
         public static float LevelCompleteReward() => 25f;
     }
 }
