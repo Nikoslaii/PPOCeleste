@@ -7,58 +7,50 @@ namespace Celeste.Mod.PPOCeleste {
     public static class RewardSystem {
 
         // previous values to compute reward deltas
-        private static Vector2 lastPos;
-        private static bool isInitialized = false;
 
-        public static float ComputeReward(Dictionary<string, object> obs, Player player) {
+        public static float ComputeReward(Dictionary<string, object> obs) {
 
             float reward = 0f;
 
             // --- On récupère les valeurs utiles ---
-            float x = (float)obs["x"];
-            float y = (float)obs["y"];
             float vx = (float)obs["vx"];
             float vy = (float)obs["vy"];
-            Vector2 progress = (Vector2)obs["progress"];  // direction normalisée
-            int dashesLeft = (int)obs["dashes_left"];
-            bool grounded = (bool)obs["grounded"];
-            bool wall = (bool)obs["wallcheck"];
+            float progress = (float)obs["progress"];
+            float grounded = (float)obs["grounded"];
+            float wall = (float)obs["wallcheck"];
+            float ducking = (float)obs["ducking"];
+            float stamina = (float)obs["stamina"];
 
-            // --- Première frame après spawn ---
-            if (!isInitialized) {
-                lastPos = new Vector2(x, y);
-                isInitialized = true;
-                return 0f;
-            }
-
-            Vector2 currentPos = new Vector2(x, y);
-            Vector2 movement = currentPos - lastPos;
+            Vector2 movement = new Vector2(vx, vy);
 
             // --------- 1. REWARD DE PROGRESSION ---------
             // Dot product : si le joueur avance VERS l’objectif → reward positif
-            float directionalReward = Vector2.Dot(movement, progress);
-            reward += directionalReward * 3f;   // facteur important → drive agent
+            reward += progress * 3f;  // reward brut de progression
+            
 
             // --------- 2. VIVRE = POSITIF ---------
             reward += 0.05f;  // incite l'agent à ne pas mourir
 
             // --------- 3. DÉPLACEMENT ACTIF ---------
-            reward += movement.Length() * 0.2f;
+            reward += movement.Length() * progress *9f;
 
             // --------- 4. REWARD POUR ÉTAT AU SOL ---------
-            if (grounded)
-                reward += 0.03f;
+            if (grounded==1)
+                reward += 0.15f;
 
             // --------- 5. PENALITÉ WALLHUG ---------
-            if (wall)
+            if (wall==1 && grounded==0)
                 reward -= 0.05f;
 
             // --------- 6. PENALITÉ POUR STAGNATION ---------
-            if (movement.Length() < 0.05f)
-                reward -= 0.03f;
+            if (movement.Length() < 0.10f)
+                reward -= 0.10f;
 
-            // save last position
-            lastPos = currentPos;
+            if (ducking==1)
+                reward -= 0.25f;
+
+            if (stamina == 0f)
+                reward -= 0.05f;
 
             return reward;
         }
@@ -66,9 +58,5 @@ namespace Celeste.Mod.PPOCeleste {
         public static float DeathPenalty() => -15f;
 
         public static float LevelCompleteReward() => 25f;
-
-        public static void Reset() {
-            isInitialized = false;
-        }
     }
 }

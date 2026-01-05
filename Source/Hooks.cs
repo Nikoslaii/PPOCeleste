@@ -13,12 +13,14 @@ using static Celeste.Mod.PPOCeleste.PPOCelesteModule;
 
 namespace Celeste.Mod.PPOCeleste
 {
+
+    
     public static class Hooks
     {
         private static On.Celeste.Player.hook_Update updateHook;//permet plus facilement la l'ajout à la fonction #risque de changer
         private static Player lastPlayer;//pour garder en mémoire l'état du joueur à l'instant de l'observation
         private static float clock = 0f;// compteur pour connaitre le temps passer
-        private const float SendInterval = 1f / 20f; // 20 Hz
+        private const float SendInterval = 1f / 60f; // 20 Hz
 
 
 
@@ -38,7 +40,7 @@ namespace Celeste.Mod.PPOCeleste
                     clock = 0f;//réinitialise la clock  
                     var level = self.Scene as Level;// stoque le niveau actuel
                     var obs = GetObservation(level);//récupère les variables/inputs pour l'entrainement
-                    Instance.SendObsToPPO(obs,lastPlayer);//envois les inputs a PPOTorsh
+                    Instance.SendObsToPPO(obs);//envois les inputs a PPOTorsh
 
                     Instance.GetActionFromPPO(); // récupère les actions a effectuer
                     ApplyActions(self);           // applique les actions reçues
@@ -58,6 +60,9 @@ namespace Celeste.Mod.PPOCeleste
 
         }
 
+        private static int distancemax = 200; // distance max pour normalisation des distances ennemies
+
+        
         // Fonction pour récupérer les données utiles pour PPO
         public static Dictionary<string, object> GetObservation(Level level = null)
         {
@@ -72,33 +77,43 @@ namespace Celeste.Mod.PPOCeleste
                 foreach (var entity in level.Tracker.GetEntities<Seeker>())
                 {
                     if (count >= 10) break;//limite à 10 ennemie en coupant la boucle
-                    enemies.Add(entity.Position.X);
-                    enemies.Add(entity.Position.Y);
-                    enemies.Add(entity.Width);
-                    enemies.Add(entity.Height);
+                    enemies.Add(entity.Position.X/level.Bounds.Width);
+                    enemies.Add(entity.Position.Y/level.Bounds.Height);
+                    enemies.Add(entity.Width/level.Bounds.Width);
+                    enemies.Add(entity.Height/level.Bounds.Height);
                     count++;
                 }
 
                 //construction des obs
-                obs["x"] = lastPlayer.Position.X;
-                obs["y"] = lastPlayer.Position.Y;
-                obs["vx"] = lastPlayer.Speed.X; 
-                obs["vy"] = lastPlayer.Speed.Y;
-                obs["grounded"] = lastPlayer.OnGround();         // si Madeline est au sol
-                obs["dashes_left"] = lastPlayer.Dashes;          // nombre de dash restant
-                obs["wallcheck"] = GetWallCheck(lastPlayer);     // si Madeline touche un mur
-                obs["grab"] = lastPlayer.StateMachine.State == Player.StClimb; // si Madeline est en train de grimper
+                obs["x"] = lastPlayer.Position.X/level.Bounds.Width; // position x normalisée (0 à 1)
+                obs["y"] = lastPlayer.Position.Y/level.Bounds.Height;// hauteur normalisée (0 à 1)
+                obs["vx"] = lastPlayer.Speed.X/200f;                // vitesse x normalisée (environ -1 à 1)
+                obs["vy"] = lastPlayer.Speed.Y/200f;                // vitesse y normalisée (environ -1 à 1)
+                obs["grounded"] = lastPlayer.OnGround() ? 1f : 0f;            // si Madeline est au sol
+                obs["ducking"] = lastPlayer.Ducking ? 1f : 0f;                // si Madeline est accroupie
+                obs["dashes_left"] = lastPlayer.Dashes / 2f;        // nombre de dash restant normalisé (0 à 1)
+                obs["wallcheck"] = GetWallCheck(lastPlayer) ? 1f : 0f;        // si Madeline touche un mur
+                obs["grab"] = lastPlayer.StateMachine.State == Player.StClimb ? 1f : 0f; // si Madeline est en train de grimper
+                obs["stamina"] = lastPlayer.Stamina / 110f;         // endurance normalisée (0 à 1)
+                
                 ProgressionTracker tracker = GetProgressTracker(level);
 
-                if (tracker != null)
-                    obs["progress"] = tracker.NextVector;
-                else{
+                if (tracker != null){
+                    
+                    if (tracker.NextVector.Length() > distancemax)
+                    {
+                        distancemax = (int)tracker.NextVector.Length();
+                    }
+
+                    obs["progress"] = 1 - tracker.NextVector.Length() / distancemax; //progression dans la room par ProgressionTracker
+                    
+                }else{
                     
                     obs["progress"] = Vector2.Zero;//progression dans la room par ProgressionTracker
                 }
-                obs["enemies"] = enemies;                     // liste des ennemies proches (coordonées et tailles)
-                // Matrice 15*15 centrée sur le joueur (0: vide, 1: solide, 2(^)-3(>)-4(v)-5(<): piques)
-                obs["grid"] = GetGrid(level, lastPlayer, 15);
+                obs["enemies"] = enemies;                     // liste des ennemies proches (coordonées et tailles) normalisées
+                // Matrice 15*15 centrée sur le joueur (0: vide, 1: solide, 2(^)-3(>)-4(v)-5(<): piques /5f pour normaliser entre 0 et 1)
+                obs["grid"] = GetGrid(level, lastPlayer, 15); // grille d'environnement normalisée (0 à 1)
             }
             return obs;
 
@@ -118,7 +133,7 @@ namespace Celeste.Mod.PPOCeleste
 
             if (level == null)
                 return null;
-            try{
+            try{ // essaye de récupérer l'entité ProgressionTracker
             
                 return level.Tracker.GetEntity<ProgressionTracker>();
             }
@@ -130,9 +145,9 @@ namespace Celeste.Mod.PPOCeleste
 
 
         //fonction pour optenir une grille de "la vision" de l'agent# à optimiser
-        private static List<int> GetGrid(Level level, Player player, int gridSize = 15)
+        private static List<float> GetGrid(Level level, Player player, int gridSize = 15)
         {
-            var grid = new List<int>();
+            var grid = new List<float>();
 
             int tileSize = 8; // taille d'une tuile en pixels
             int half = gridSize / 2; // half pour centrer
@@ -189,7 +204,7 @@ namespace Celeste.Mod.PPOCeleste
                     {
                         val = 1; // solide
                     }
-                    grid.Add(val); 
+                    grid.Add(val/5f); 
                 }
             }
 
@@ -199,7 +214,7 @@ namespace Celeste.Mod.PPOCeleste
         //actione en fonction des output du PPO
         public static void ApplyActions(Player player) 
         {
-            var actions = Instance.GetActionFromPPO();
+            Dictionary<string, bool> actions = Instance.GetActionFromPPO();
 
             if (actions.TryGetValue("left", out bool left) && left)
             {
@@ -217,7 +232,6 @@ namespace Celeste.Mod.PPOCeleste
             {
                 player.Speed.Y += 1; // déplace(direction) Madeline vers le bas
             }
-
             if (actions.TryGetValue("jump", out bool jump) && jump && player.OnGround())
             {
                 player.Jump(); // fait sauter Madeline
@@ -233,6 +247,14 @@ namespace Celeste.Mod.PPOCeleste
                 {
                     player.StateMachine.State = Player.StClimb; // passe en état de grimpe
                 }
+            }
+            if (actions.TryGetValue("duck", out bool duck) && duck)
+            {
+                player.Ducking = true; // fait accroupir Madeline
+            }
+            else
+            {
+                player.Ducking = false; // fait se relever Madeline
             }
         }
     }

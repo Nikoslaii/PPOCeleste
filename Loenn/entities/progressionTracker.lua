@@ -18,15 +18,4 @@ progressTracker.placements = {--valeurs par défaut pour le placement de l'entit
     }
 }
 
--- Caractéristiques par node (type attendu)
-progressTracker.nodeFieldInformation = {
-    -- la progression à laquelle réinitialiser le joueur en cas de mort
-    onDeath = { fieldType = "integer" }
-}
-
--- Valeurs par défaut pour chaque node (array -> defaults pour chaque node)
-progressTracker.nodeDefaults = {
-    0  -- valeur par défaut pour onDeath
-}
-
 return progressTracker

@@ -40,7 +40,6 @@ public class PPOCelesteModule : EverestModule
     public class ProgressionTracker : Entity {
         private string flag;
         private List<Vector2> points = [];
-        private List<int> nodeOnDeathValues = [];  // Ajouter ce champ à la classe
         public Vector2 NextVector { get; private set; } = Vector2.Zero; // vecteur vers le prochains points
 
         public ProgressionTracker(EntityData data, Vector2 offset) : base(data.Position + offset) {
@@ -48,19 +47,11 @@ public class PPOCelesteModule : EverestModule
 
             Tag |= Tags.Global | Tags.Persistent; // permet de garder chargé l'entité dans tout le niveau
 
-            // Récupère les positions et les propriétés onDeath depuis le dictionnaire Values
+            // Récupère les positions depuis le dictionnaire Values
             for (int i = 0; i < data.Nodes.Length; i++)
             {
                 Vector2 pos = data.Nodes[i] + offset;
                 points.Add(pos);
-                
-                // Loenn exporte les propriétés des nodes sous la forme "nodeX_propertyName"
-                // Pour le node 0 et la propriété onDeath : "node0_onDeath", etc.
-                string onDeathKey = $"node{i}_onDeath";
-                int onDeathProgress = data.Int(onDeathKey, 0);
-                nodeOnDeathValues.Add(onDeathProgress);
-                
-                Logger.Log(LogLevel.Verbose, "ProgressionTracker", $"Node {i}: position={pos}, onDeath={onDeathProgress}");
             }
         }
 
@@ -77,20 +68,19 @@ public class PPOCelesteModule : EverestModule
 
             int progress = level.Session.GetCounter(flag);
     
-            if (progress < points.Count) {
-                Vector2 nextPoint = points[progress];
+            if (progress < points.Count) { // il reste des points à atteindre
+                Vector2 nextPoint = points[progress]; // prochain point à atteindre
                 float distance = Vector2.Distance(player.Center, nextPoint);
 
                 NextVector = nextPoint - player.Center;
 
-                if (distance < 16f) {
-                    level.Session.SetCounter(flag, progress + 1);
+                if (distance < 16f) { // si le joueur est proche du point
+                    level.Session.SetCounter(flag, progress + 1); // incrémente le progrès
 
-                    
+                    // Donne la récompense à l'agent PPO
                     Instance.ppo.EndEpisode(RewardSystem.LevelCompleteReward());
-                    RewardSystem.Reset();
 
-                    if (progress + 1 == points.Count)
+                    if (progress + 1 >= points.Count)
                         level.Session.SetFlag(flag + "_done", true);
                 }
             } else {
@@ -190,7 +180,7 @@ public class PPOCelesteModule : EverestModule
 
     public override void Initialize()//lancé après le chargement 
     {
-        ppo = new PPOAgent(obsSize: 275, hiddenSizes: [128,64]);
+        ppo = new PPOAgent(obsSize: 277, hiddenSizes: [128,64]);
 
         string weightsPath = Path.Combine(Everest.PathGame, "Mods", "PPOCeleste", "ppo_weights.json");
 
@@ -212,7 +202,6 @@ public class PPOCelesteModule : EverestModule
             var result = orig(self, direction, evenIfInvincible, registerDeathInStats);
             
             Instance.ppo.EndEpisode(RewardSystem.DeathPenalty());
-            RewardSystem.Reset();
 
             return result;
         };        
@@ -220,7 +209,8 @@ public class PPOCelesteModule : EverestModule
         On.Celeste.Player.Die += OnDeathHook;
 
 
-        On.Celeste.Player.Render += static (orig, self) => {
+        On.Celeste.Player.Render += static (orig, self) => { 
+             
             orig(self);
 
             // On récupère les actions depuis ton agent PPO
@@ -228,7 +218,7 @@ public class PPOCelesteModule : EverestModule
             if (actions == null)
                 return;
 
-            DrawActionCircles(self, actions);
+            DrawActionCircles(self, actions); // Dessine les cercles d'actions
         };
 
     }
@@ -237,14 +227,14 @@ public class PPOCelesteModule : EverestModule
     {
         Hooks.Unload();
         On.Celeste.Player.Die -= OnDeathHook;
-        ppo.SaveWeights("path/to/weights.json");
+        ppo.SaveWeights("path/to/weights.json"); // Sauvegarde les poids avant de décharger
         ppo = null;
     }
 
-    public void SendObsToPPO(Dictionary<string, object> obs, Player player)//liens entre hooks et ppo
+    public void SendObsToPPO(Dictionary<string, object> obs)//liens entre hooks et ppo
     {
         ppo.ReceiveObs(obs);
-        float reward = RewardSystem.ComputeReward(obs, player);
+        float reward = RewardSystem.ComputeReward(obs);
         ppo.StoreReward(reward);
 
     }
@@ -252,7 +242,7 @@ public class PPOCelesteModule : EverestModule
     public Dictionary<string, bool> GetActionFromPPO()
     {
         
-        return ppo.GetActionFromPPO();
+        return ppo.GetActionFromPPO(); // 
 
     }
 }

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -27,6 +27,7 @@
     </PackageReference>
     <PackageReference Include="MonoMod.Patcher" Version="25.0.0-prerelease.2" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="TensorFlow.NET" Version="0.150.0" />
 
   </ItemGroup>
 

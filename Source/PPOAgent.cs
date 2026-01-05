@@ -7,25 +7,6 @@ using Microsoft.Xna.Framework;
 
 namespace Celeste.Mod.PPOCeleste
 {
-    /// <summary>
-    /// Compact, pure-C# PPO agent (multi-binary action head).
-    /// - No native dependencies
-    /// - On-policy PPO with GAE
-    /// - Simple MLP backbone + Bernoulli policy head + value head
-    /// 
-    /// Public API (for integration with Hooks/PPOCelesteModule):
-    /// - PPOAgent(int obsSize, int[] hiddenSizes)
-    /// - void ReceiveObs(Dictionary<string, object> obs)
-    /// - Dictionary<string,bool> GetActionFromPPO(bool deterministic=false)
-    /// - void StoreReward(float r)
-    /// - void EndEpisode(float finalReward=0f)
-    /// - void UpdatePolicy()
-    /// - void SaveWeights(string path), LoadWeights(string path)
-    /// 
-    /// Observation mapping defaults to the same layout used previously in Hooks:
-    /// [x,y,vx,vy,grounded,dashes_left,wallcheck,grab, progress.x, progress.y, enemies(10*4), grid(15*15)]
-    /// (Total default size = 275). Update ObsToVector if you change observation contents.
-    /// </summary>
     public class PPOAgent
     {
         // Configuration
@@ -80,7 +61,7 @@ namespace Celeste.Mod.PPOCeleste
         public PPOAgent(int obsSize = 275, int[] hiddenSizes = null, int seed = 0)
         {
             ObservationSize = obsSize;
-            HiddenSizes = hiddenSizes ?? new int[] { 128, 64 };
+            HiddenSizes = hiddenSizes ?? [128, 64];
             rng = new Random(seed);
             InitNetwork();
         }
@@ -193,18 +174,19 @@ namespace Celeste.Mod.PPOCeleste
 
         public float[] ObsToVector(Dictionary<string, object> obs)
         {
-            var v = new List<float>();
-            v.Add(GetF(obs, "x")); v.Add(GetF(obs, "y")); v.Add(GetF(obs, "vx")); v.Add(GetF(obs, "vy"));
-            v.Add(GetB(obs, "grounded") ? 1f : 0f); v.Add(GetI(obs, "dashes_left"));
-            v.Add(GetB(obs, "wallcheck") ? 1f : 0f); v.Add(GetB(obs, "grab") ? 1f : 0f);
-
-            if (obs.TryGetValue("progress", out object prog) && prog != null)
+            var v = new List<float>
             {
-                if (prog is Vector2 mv) { v.Add(mv.X); v.Add(mv.Y); }
-                else if (prog is System.Numerics.Vector2 nv) { v.Add(nv.X); v.Add(nv.Y); }
-                else { v.Add(0f); v.Add(0f); }
-            }
-            else { v.Add(0f); v.Add(0f); }
+                GetF(obs, "x"),
+                GetF(obs, "y"),
+                GetF(obs, "vx"),
+                GetF(obs, "vy"),
+                GetF(obs, "grounded"),
+                GetF(obs, "dashes_left"),
+                GetF(obs, "wallcheck"),
+                GetF(obs, "grab"),
+                GetF(obs, "stamina"),
+                GetF(obs, "progress")
+            };
 
             if (obs.TryGetValue("enemies", out object en) && en is List<float> el)
             {
@@ -257,8 +239,8 @@ namespace Celeste.Mod.PPOCeleste
             return SampleToDict(sample);
         }
 
-        private Dictionary<string, bool> NoAction() => new Dictionary<string, bool> { { "left", false }, { "right", false }, { "up", false }, { "down", false }, { "jump", false }, { "dash", false }, { "grab", false } };
-        private Dictionary<string, bool> SampleToDict(float[] s) => new Dictionary<string, bool> { { "left", s[0] > 0.5f }, { "right", s[1] > 0.5f }, { "up", s[2] > 0.5f }, { "down", s[3] > 0.5f }, { "jump", s[4] > 0.5f }, { "dash", s[5] > 0.5f }, { "grab", s[6] > 0.5f } };
+        private Dictionary<string, bool> NoAction() => new Dictionary<string, bool> { { "left", false }, { "right", false }, { "up", false }, { "down", false }, { "jump", false }, { "dash", false }, { "grab", false }, {"duck", false} };
+        private Dictionary<string, bool> SampleToDict(float[] s) => new Dictionary<string, bool> { { "left", s[0] > 0.5f }, { "right", s[1] > 0.5f }, { "up", s[2] > 0.5f }, { "down", s[3] > 0.5f }, { "jump", s[4] > 0.5f }, { "dash", s[5] > 0.5f }, { "grab", s[6] > 0.5f }, {"duck", s[7] > 0.5f} };
 
         // ---------- Environment hooks ----------
         public void StoreReward(float r) { rewBuf.Add(r); doneBuf.Add(0f); }
