@@ -20,7 +20,7 @@ namespace Celeste.Mod.PPOCeleste
         private static On.Celeste.Player.hook_Update updateHook;//permet plus facilement la l'ajout à la fonction #risque de changer
         private static Player lastPlayer;//pour garder en mémoire l'état du joueur à l'instant de l'observation
         private static float clock = 0f;// compteur pour connaitre le temps passer
-        private const float SendInterval = 1f / 60f; // 20 Hz
+        private const float SendInterval = 1f / 20f; // 20 Hz
 
 
 
