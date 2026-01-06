@@ -21,7 +21,7 @@ namespace Celeste.Mod.PPOCeleste
         private static Player lastPlayer;//pour garder en mémoire l'état du joueur à l'instant de l'observation
         private static float clock = 0f;// compteur pour connaitre le temps passer
         private const float SendInterval = 1f / 20f; // 20 Hz
-
+        private const float EpisodeTimeout = 45f; // 45 seconds max per episode
 
 
         public static void Load()//au lancement du mod
@@ -37,9 +37,10 @@ namespace Celeste.Mod.PPOCeleste
                     Instance.episodeTimer += Engine.RawDeltaTime;
                     
                     // Check for timeout (45 seconds)
-                    if (Instance.episodeTimer >= EPISODE_TIMEOUT) {
+                    if (Instance.episodeTimer >= EpisodeTimeout) {
                         Instance.PPO.EndEpisode(RewardSystem.TimeoutPenalty());
                         Instance.ResetEpisode(self, false);
+                        
                         return; // Skip this frame after reset
                     }
                 }

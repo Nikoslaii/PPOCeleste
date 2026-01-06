@@ -39,7 +39,7 @@ public class PPOCelesteModule : EverestModule
     public int episodeCount = 0;
     public float totalReward = 0f;
     public bool isResetting = false; // Prevent double EndEpisode from death hook
-    public const float EPISODE_TIMEOUT = 45f; // 45 seconds max per episode
+
     public const int TRAIN_EVERY_N_EPISODES = 10; // Train after every 10 episodes
 
 
