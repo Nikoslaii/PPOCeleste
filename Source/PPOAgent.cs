@@ -132,12 +132,31 @@ namespace Celeste.Mod.PPOCeleste
 
         private float[] PolicyFromHidden(float[] hid)
         {
-            int h = hid.Length; float[] probs = new float[ActionCount];
-            for (int a = 0; a < ActionCount; a++)
-            {
-                int baseIdx = a * h; float s = policyB[a];
-                for (int j = 0; j < h; j++) s += policyW[baseIdx + j] * hid[j];
-                probs[a] = Sigmoid(s);
+            if (hid == null) return new float[ActionCount];
+            int h = hid.Length; 
+            float[] probs = new float[ActionCount];
+            
+            // Safety check for weight dimensions
+            if (policyB.Length != ActionCount || policyW.Length < ActionCount * h) {
+                // Mismatch detected - return neutral/random or zero
+                return probs; 
+            }
+
+            try {
+                for (int a = 0; a < ActionCount; a++)
+                {
+                    int baseIdx = a * h; 
+                    float s = policyB[a];
+                    // Ensure loop doesn't exceed array bounds even if h is correct
+                    int limit = Math.Min(h, policyW.Length - baseIdx);
+                    
+                    for (int j = 0; j < limit; j++) s += policyW[baseIdx + j] * hid[j];
+                    
+                    probs[a] = Sigmoid(s);
+                }
+            } catch (Exception) {
+                // Log/Ignore
+                return new float[ActionCount];
             }
             return probs;
         }

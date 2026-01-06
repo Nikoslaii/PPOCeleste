@@ -42,9 +42,9 @@ public class PPOCelesteModule : EverestModule
 
     public const int TRAIN_EVERY_N_EPISODES = 10; // Train after every 10 episodes
 
-
+    // Public access to PPO agent
+    public PPOAgent PPO => ppo;
     [CustomEntity("CelesteCustom/progressionTracker")]
-    [Tracked]
     public class ProgressionTracker : Entity {
         private string flag;
         private List<Vector2> points = [];
@@ -67,6 +67,8 @@ public class PPOCelesteModule : EverestModule
             base.Update();
 
             Level level = SceneAs<Level>();
+            if (level == null) return;
+
             Player player = Scene.Tracker.GetEntity<Player>();
             
 
@@ -85,7 +87,7 @@ public class PPOCelesteModule : EverestModule
                 if (distance < 16f) { // si le joueur est proche du point
                     level.Session.SetCounter(flag, progress + 1); // incrémente le progrès
 
-                    // Donne la récompense à l'agent PPO
+                    // Donne la récompense à l'agent PPO (AddReward, not EndEpisode)
                     Instance.PPO.AddReward(RewardSystem.LevelCompleteReward());
                     
                     // Reset timer to give more time after reaching checkpoint
@@ -94,7 +96,7 @@ public class PPOCelesteModule : EverestModule
                     if (progress + 1 >= points.Count) {
                         level.Session.SetFlag(flag + "_done", true);
                         // End episode when all checkpoints completed
-                        Instance.PPO.EndEpisode(0f); // Mark done
+                        Instance.PPO.EndEpisode(0f);
                         Instance.ResetEpisode(player, true);
                     }
                 }
@@ -146,9 +148,6 @@ public class PPOCelesteModule : EverestModule
     }
 
 
-    public static ProgressionTracker GetTracker(Scene Scene) {
-        return Scene.Tracker.GetEntity<ProgressionTracker>();
-    }
 
     public void ResetEpisode(Player player, bool completed = false) {
         isResetting = true; // Set flag to prevent death hook recursion
@@ -183,6 +182,10 @@ public class PPOCelesteModule : EverestModule
         }
         
         isResetting = false; // Clear flag after reset complete
+    }
+
+    public static ProgressionTracker GetTracker(Scene Scene) {
+    return Scene.Tracker.GetEntity<ProgressionTracker>();
     }
 
 
@@ -251,7 +254,6 @@ public class PPOCelesteModule : EverestModule
         {
             var result = orig(self, direction, evenIfInvincible, registerDeathInStats);
             
-            // Only record death penalty if not already resetting (prevents double EndEpisode)
             if (!Instance.isResetting) {
                 Instance.ppo.EndEpisode(RewardSystem.DeathPenalty());
             }
@@ -266,8 +268,8 @@ public class PPOCelesteModule : EverestModule
              
             orig(self);
 
-            // On récupère les actions depuis ton agent PPO
-            var actions = Instance.ppo.GetActionFromPPO();
+            // Use CACHED actions from Hooks to avoid re-sampling (and modifying buffers) during Render
+            var actions = Hooks.LastActions;
             if (actions == null)
                 return;
 
@@ -280,7 +282,8 @@ public class PPOCelesteModule : EverestModule
     {
         Hooks.Unload();
         On.Celeste.Player.Die -= OnDeathHook;
-        ppo.SaveWeights("path/to/weights.json"); // Sauvegarde les poids avant de décharger
+        string weightsPath = Path.Combine(Everest.PathGame, "Mods", "PPOCeleste", "ppo_weights.json");
+        ppo.SaveWeights(weightsPath); 
         ppo = null;
     }
 
@@ -289,7 +292,7 @@ public class PPOCelesteModule : EverestModule
         ppo.ReceiveObs(obs);
         float reward = RewardSystem.ComputeReward(obs);
         ppo.StoreReward(reward);
-        totalReward += reward; // Track cumulative reward
+
     }
 
     public Dictionary<string, bool> GetActionFromPPO()
@@ -298,7 +301,4 @@ public class PPOCelesteModule : EverestModule
         return ppo.GetActionFromPPO(); // 
 
     }
-
-    // Public access to PPO agent for episode management
-    public PPOAgent PPO => ppo;
 }

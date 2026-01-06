@@ -21,8 +21,10 @@ namespace Celeste.Mod.PPOCeleste
         private static Player lastPlayer;//pour garder en mémoire l'état du joueur à l'instant de l'observation
         private static float clock = 0f;// compteur pour connaitre le temps passer
         private const float SendInterval = 1f / 20f; // 20 Hz
-        private const float EpisodeTimeout = 45f; // 45 seconds max per episode
+        
 
+
+        public static Dictionary<string, bool> LastActions = new Dictionary<string, bool>();
 
         public static void Load()//au lancement du mod
         {
@@ -33,18 +35,14 @@ namespace Celeste.Mod.PPOCeleste
                 orig(self);//fonction originel de On.Celeste.Player.hook_Update soit player.update()
 
                 // Episode timer tracking
-                if (!self.Dead) {
+                if (!self.Dead && !Instance.isResetting) {
                     Instance.episodeTimer += Engine.RawDeltaTime;
-                    
-                    // Check for timeout (45 seconds)
-                    if (Instance.episodeTimer >= EpisodeTimeout) {
+                    if (Instance.episodeTimer >= 45.0f) {
                         Instance.PPO.EndEpisode(RewardSystem.TimeoutPenalty());
                         Instance.ResetEpisode(self, false);
-                        
-                        return; // Skip this frame after reset
+                        return;
                     }
                 }
-
                 // Timer pour 20Hz
                 clock += Engine.RawDeltaTime;// mets à jour le temps passer
                 if (clock >= SendInterval)//compare pour vérifier que ça fait 1/20 seconde
@@ -56,6 +54,7 @@ namespace Celeste.Mod.PPOCeleste
                     Instance.SendObsToPPO(obs);//envois les inputs a PPOTorsh
 
                     var actions = Instance.GetActionFromPPO(); // récupère les actions a effectuer
+                    LastActions = actions; // Cache for Render
                     ApplyActions(self, actions);           // applique les actions reçues
 
                 }
